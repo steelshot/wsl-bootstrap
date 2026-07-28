@@ -1,0 +1,14 @@
+core:
+  wheel: true
+  repositories: []
+  packages: []
+  default_packages:
+    - ca-certificates
+    - curl
+    - gzip
+    - iproute2
+    - procps
+    - tar
+    - util-linux-systemd
+    - wget
+    - xz

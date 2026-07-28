@@ -1,0 +1,44 @@
+- name: Discover udev rules
+  ansible.builtin.set_fact:
+    udev_rule_files: "{{ query('ansible.builtin.fileglob', udev_rules.source ~ '/*') }}"
+
+- name: Install udev rules
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/udev/rules.d/{{ item | basename }}"
+    mode: "0644"
+  loop: "{{ udev_rule_files }}"
+  register: udev_rules_result
+
+- name: Start udev manager
+  ansible.builtin.systemd_service:
+    name: systemd-udevd.service
+    state: started
+
+- name: Check for active udev manager
+  ansible.builtin.stat:
+    path: /run/udev/control
+  register: udev_control
+
+- name: Reload udev rules
+  ansible.builtin.command:
+    argv:
+      - udevadm
+      - control
+      - --reload-rules
+  changed_when: false
+  when:
+    - udev_rules_result.changed
+    - udev_control.stat.exists
+
+- name: Apply udev rules
+  ansible.builtin.command:
+    argv:
+      - udevadm
+      - trigger
+      - "--subsystem-match={{ udev_rules.subsystem }}"
+      - --settle
+  changed_when: false
+  when:
+    - udev_rules_result.changed
+    - udev_control.stat.exists

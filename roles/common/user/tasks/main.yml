@@ -1,0 +1,92 @@
+- name: Resolve Windows user name for the managed account
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/windows-user.yml"
+  when: (user.account | default('') | length) == 0
+
+- name: Derive managed account from the Windows user name
+  ansible.builtin.set_fact:
+    user: "{{ user | combine({'account': windows_username ~ ':1000:1000:zsh'}) }}"
+  when: (user.account | default('') | length) == 0
+
+- name: Validate account configuration
+  ansible.builtin.assert:
+    that:
+      - user.account is string
+      - user.account is match('^[^:\s]+:\d+:\d+:[A-Za-z0-9][A-Za-z0-9+_.-]*$')
+    fail_msg: user.account must use the name:uid:gid:shell-package format.
+
+- name: Parse managed account identity
+  ansible.builtin.set_fact:
+    user: >-
+      {{
+        user | combine({
+          'name': user.account.split(':')[0],
+          'uid': user.account.split(':')[1] | int,
+          'gid': user.account.split(':')[2] | int,
+          'shell': user.account.split(':')[3],
+          'home': '/home/' ~ user.account.split(':')[0],
+          'groups': user.groups | default(['wheel'] if core.wheel | default(true) | bool else [])
+        })
+      }}
+
+- name: Install managed user shell and editor
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages:
+        - "{{ user.shell }}"
+        - "{{ user.editor }}"
+
+- name: Configure default editor environment
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/profile-scripts.yml"
+  vars:
+    profile:
+      scripts:
+        - name: editor.sh
+          content: |
+            export EDITOR={{ user.editor }}
+            export VISUAL={{ user.editor }}
+
+- name: Create managed user group
+  ansible.builtin.group:
+    name: "{{ user.name }}"
+    gid: "{{ user.gid }}"
+
+- name: Create managed user
+  ansible.builtin.user:
+    name: "{{ user.name }}"
+    uid: "{{ user.uid }}"
+    group: "{{ user.name }}"
+    groups: "{{ user.groups }}"
+    append: true
+    shell: "/bin/{{ user.shell }}"
+    home: "{{ user.home }}"
+    create_home: true
+
+- name: Set managed user as the WSL default
+  community.general.ini_file:
+    path: /etc/wsl.conf
+    section: user
+    option: default
+    value: "{{ user.name }}"
+    no_extra_spaces: true
+    mode: "0644"
+
+- name: Initialize locale, keymap and timezone
+  ansible.builtin.command:
+    argv:
+      - systemd-firstboot
+      - --force
+      - "--keymap={{ user.keymap | default('gb') }}"
+      - "--timezone={{ user.timezone | default('Europe/Dublin') }}"
+      - "--locale={{ user.locale | default('C.UTF-8') }}"
+
+- name: Neutralize OOBE command
+  ansible.builtin.replace:
+    path: /etc/wsl-distribution.conf
+    regexp: '^command\s*=.*'
+    replace: command = /bin/true
+
+- name: Remove managed user password
+  ansible.builtin.command: "passwd -d {{ user.name }}"
+  changed_when: false
+  when: "'wheel' in user.groups"

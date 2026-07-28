@@ -1,0 +1,4 @@
+# The shared task files under tasks/ are addressed from the repository root. Every play lives in a playbook under
+# playbooks/, whether it is run directly or reached through site.yml, so the parent of playbook_dir is the repository
+# root in both cases.
+project_dir: "{{ playbook_dir | dirname }}"

@@ -1,0 +1,17 @@
+user:
+  account: orchestrator:1000:1000:bash
+  editor: nano
+
+ssh:
+  key:
+    name: id_orchestrator
+  service:
+    port: 22222
+  export:
+    enabled: true
+    alias: orchestrator
+
+rke2:
+  version: v1.36
+  gpu_operator_version: v26.3.3
+  kubeconfig_sync: true

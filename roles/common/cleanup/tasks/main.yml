@@ -1,0 +1,26 @@
+# Final task: removes Ansible and its provisioning state.
+# No Ansible operations may follow this task.
+#
+# The raw module is deliberate. Removing ansible-core deletes the runtime that a regular module needs in order to
+# return its result, so the removal is issued without the module protocol. The script is kept POSIX compatible
+# because raw executes through /bin/sh.
+
+- name: Remove Ansible package and clean up provisioning state
+  ansible.builtin.raw: |
+    set -eu
+    installed_packages=""
+    for package in ansible-core python3-kubernetes; do
+      if rpm --query -- "${package}" >/dev/null 2>&1; then
+        installed_packages="${installed_packages} ${package}"
+      fi
+    done
+    if [ -n "${installed_packages}" ]; then
+      zypper --non-interactive remove --clean-deps -- ${installed_packages}
+    fi
+    rm -rf -- \
+      /root/.ansible \
+      /root/.cache/ansible \
+      /root/.cache/ansible-compat \
+      /root/.ansible.cfg \
+      /etc/ansible
+  tags: [never, cleanup]

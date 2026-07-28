@@ -1,0 +1,58 @@
+argument_specs:
+  main:
+    short_description: Configure base operating system services and packages.
+    description: Installs repositories, upgrades the system, manages sudo, and deploys static systemd units.
+    options:
+      core:
+        type: dict
+        description: Core role configuration.
+        options:
+          wheel:
+            type: bool
+            default: true
+            description: Whether to install and configure passwordless wheel sudo and remove the root password.
+          repositories:
+            type: list
+            default: []
+            elements: dict
+            description: Managed Zypper repositories.
+            options:
+              name:
+                type: str
+                required: true
+                description: Repository name.
+              description:
+                type: str
+                required: true
+                description: Repository description.
+              repo:
+                type: str
+                required: true
+                description: Repository URL.
+              gpgkey:
+                type: str
+                required: true
+                description: Repository signing key URL.
+              enabled:
+                type: bool
+                required: true
+                description: Whether the repository is enabled.
+          packages:
+            type: list
+            default: []
+            elements: str
+            description: Additional packages to install alongside the core baseline.
+          default_packages:
+            type: list
+            default:
+              - ca-certificates
+              - curl
+              - gzip
+              - iproute2
+              - procps
+              - tar
+              - util-linux-systemd
+              - wget
+              - xz
+            elements: str
+            description: Core baseline packages.

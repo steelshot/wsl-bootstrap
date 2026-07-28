@@ -1,0 +1,19 @@
+- name: Configure Git repository
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-repositories.yml"
+  vars:
+    zypper:
+      repositories:
+        - name: github:repo-cli
+          description: github-cli
+          repo: https://cli.github.com/packages/rpm
+          gpgkey: https://cli.github.com/packages/githubcli-archive-keyring.asc
+          enabled: true
+
+- name: Install Git packages
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages:
+        - git-core
+        - gh
+      disable_recommends: true

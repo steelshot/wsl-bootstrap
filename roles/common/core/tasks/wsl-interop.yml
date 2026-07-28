@@ -1,0 +1,48 @@
+# The openSUSE WSL images can boot with systemd enabled but without the WSL interop binfmt handler registered, which
+# leaves every Windows executable unrunnable and is not repaired by restarting the distribution. Declaring the handler
+# in binfmt.d restores it on each boot, and reloading the service applies it to the running session.
+
+- name: Probe Windows executable interop
+  ansible.builtin.command:
+    argv:
+      - cmd.exe
+      - /c
+      - exit
+  register: wsl_interop_probe
+  changed_when: false
+  failed_when: false
+
+- name: Restore WSL interop binfmt registration
+  ansible.builtin.copy:
+    dest: /etc/binfmt.d/WSLInterop.conf
+    content: ":WSLInterop:M::MZ::/init:PF\n"
+    owner: root
+    group: root
+    mode: "0644"
+  when: (wsl_interop_probe.rc | default(1)) != 0
+
+- name: Reload binfmt registrations
+  ansible.builtin.systemd_service:
+    name: systemd-binfmt.service
+    state: restarted
+  when: (wsl_interop_probe.rc | default(1)) != 0
+
+- name: Verify Windows executable interop
+  ansible.builtin.command:
+    argv:
+      - cmd.exe
+      - /c
+      - exit
+  register: wsl_interop_verification
+  changed_when: false
+  failed_when: false
+  when: (wsl_interop_probe.rc | default(1)) != 0
+
+- name: Assert Windows executable interop is available
+  ansible.builtin.assert:
+    that:
+      - (wsl_interop_verification.rc | default(1)) == 0
+    fail_msg: >-
+      WSL interop is still unavailable after restoring the binfmt registration.
+      Check that interop is not disabled in /etc/wsl.conf.
+  when: (wsl_interop_probe.rc | default(1)) != 0

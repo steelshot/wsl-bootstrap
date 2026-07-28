@@ -1,0 +1,23 @@
+- name: Discover custom systemd units
+  ansible.builtin.set_fact:
+    systemd_unit_files: "{{ query('ansible.builtin.fileglob', systemd_units.source ~ '/*') }}"
+
+- name: Install custom systemd units
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item | basename }}"
+    mode: "0644"
+  loop: "{{ systemd_unit_files }}"
+  register: systemd_units_result
+
+- name: Reload systemd manager configuration
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: systemd_units_result.changed
+
+- name: Enable and start custom systemd units
+  ansible.builtin.systemd_service:
+    name: "{{ item | basename }}"
+    enabled: true
+    state: started
+  loop: "{{ systemd_unit_files }}"

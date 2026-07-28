@@ -1,0 +1,54 @@
+- name: Read Windows user name
+  ansible.builtin.command:
+    argv:
+      - cmd.exe
+      - /c
+      - echo
+      - "%USERNAME%"
+  register: windows_username_output
+  changed_when: false
+  when: windows_username is not defined
+
+- name: Cache normalized Windows user name
+  ansible.builtin.set_fact:
+    windows_username: "{{ (windows_username_output.stdout_lines | map('trim') | select | list | last | default('')).lower().split() | join('') }}"
+  when: windows_username is not defined
+
+- name: Assert Windows user name is usable
+  ansible.builtin.assert:
+    that:
+      - windows_username | length > 0
+      - windows_username is not search('%')
+    fail_msg: Unable to resolve the Windows user name from the host environment.
+
+- name: Read Windows user profile
+  ansible.builtin.command:
+    argv:
+      - cmd.exe
+      - /c
+      - echo
+      - "%USERPROFILE%"
+  register: windows_user_profile_output
+  changed_when: false
+  when: windows_user_profile is not defined
+
+- name: Resolve Windows user profile path
+  ansible.builtin.command:
+    argv:
+      - wslpath
+      - -u
+      - "{{ windows_user_profile_output.stdout_lines | map('trim') | select | list | last | default('') }}"
+  register: windows_user_profile_path_output
+  changed_when: false
+  when: windows_user_profile is not defined
+
+- name: Cache Windows user profile path
+  ansible.builtin.set_fact:
+    windows_user_profile: "{{ windows_user_profile_path_output.stdout_lines | map('trim') | select | list | last | default('') }}"
+  when: windows_user_profile is not defined
+
+- name: Assert Windows user profile path is usable
+  ansible.builtin.assert:
+    that:
+      - windows_user_profile is match('/')
+    fail_msg: Unable to resolve the Windows user profile path from the host environment.

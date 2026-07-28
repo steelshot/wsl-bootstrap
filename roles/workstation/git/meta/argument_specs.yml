@@ -1,0 +1,5 @@
+argument_specs:
+  main:
+    short_description: Install Git and GitHub CLI tooling.
+    description: Configures the GitHub CLI repository, installs packages, and publishes a readiness fact for dependent roles.
+    options: {}

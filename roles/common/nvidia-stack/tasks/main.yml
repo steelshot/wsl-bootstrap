@@ -1,0 +1,58 @@
+- name: Configure NVIDIA repositories
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-repositories.yml"
+  vars:
+    zypper:
+      repositories:
+        - name: nvidia:repo-container-toolkit
+          description: nvidia-container-toolkit
+          repo: https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch
+          gpgkey: https://nvidia.github.io/libnvidia-container/gpgkey
+          enabled: "{{ not (nvidia_stack.experimental | bool) }}"
+        - name: nvidia:repo-container-toolkit-experimental
+          description: nvidia-container-toolkit-experimental
+          repo: https://nvidia.github.io/libnvidia-container/experimental/rpm/$basearch
+          gpgkey: https://nvidia.github.io/libnvidia-container/gpgkey
+          enabled: "{{ nvidia_stack.experimental | bool }}"
+
+- name: Install NVIDIA stack packages
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages:
+        - kmod
+        - nvidia-container-toolkit
+
+- name: Enable NVIDIA stack services
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/systemd-services.yml"
+  vars:
+    systemd_services:
+      names:
+        - nvidia-cdi-refresh.path
+        - nvidia-cdi-refresh.service
+
+- name: Verify host GPU is visible
+  ansible.builtin.command: nvidia-smi -L
+  register: gpu_nvidia_smi
+  changed_when: false
+  failed_when: "'GPU' not in gpu_nvidia_smi.stdout"
+
+- name: Verify CDI device is generated
+  ansible.builtin.command: nvidia-ctk cdi list
+  register: gpu_cdi_list
+  changed_when: false
+  until: "'nvidia.com/gpu' in gpu_cdi_list.stdout"
+  retries: 5
+  delay: 3
+
+- name: Load vgem module persistently
+  community.general.modprobe:
+    name: vgem
+    state: present
+    persistent: present
+
+- name: Install NVIDIA udev rules
+  ansible.builtin.include_tasks: udev-rules.yml
+  vars:
+    udev_rules:
+      source: "{{ role_path }}/files/udev/rules.d"
+      subsystem: drm

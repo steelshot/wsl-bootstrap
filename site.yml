@@ -1,0 +1,10 @@
+# Each play provisions the machine it runs on, so exactly one of them is ever meant to execute on a given
+# distribution. Select it with --limit orchestrator or --limit workstation.
+#
+# The orchestrator is listed first to match the order the bootstrap provisions in, which puts the control plane in
+# place before the workstation tooling is pointed at it.
+- name: Orchestrator
+  ansible.builtin.import_playbook: playbooks/orchestrator.yml
+
+- name: Workstation
+  ansible.builtin.import_playbook: playbooks/workstation.yml

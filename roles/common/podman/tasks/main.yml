@@ -1,0 +1,30 @@
+- name: Assert managed user data is available
+  ansible.builtin.assert:
+    that:
+      - user.name is defined
+      - user.home is defined
+    fail_msg: user must be enriched by common/user before including common/podman.
+
+- name: Install Podman
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages:
+        - podman
+
+- name: Configure user subordinate ID ranges
+  ansible.builtin.lineinfile:
+    path: "/etc/{{ item }}"
+    regexp: "^{{ user.name | regex_escape }}:"
+    line: "{{ user.name }}:100000:65536"
+    create: true
+    mode: "0644"
+  loop:
+    - subuid
+    - subgid
+
+- name: Enable Podman socket for user sessions
+  ansible.builtin.systemd_service:
+    name: podman.socket
+    enabled: true
+    scope: global

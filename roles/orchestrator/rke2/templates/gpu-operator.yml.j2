@@ -1,0 +1,33 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: gpu-operator
+  namespace: kube-system
+spec:
+  chart: gpu-operator
+  repo: https://helm.ngc.nvidia.com/nvidia
+  version: "{{ rke2.gpu_operator_version }}"
+  targetNamespace: gpu-operator
+  createNamespace: true
+  valuesContent: |-
+    revisionHistoryLimit: 0
+    cdi:
+      enabled: true
+      default: true
+      nriPluginEnabled: true
+    driver:
+      enabled: false
+    toolkit:
+      enabled: false
+    dcgmExporter:
+      enabled: true
+    validator:
+      driver:
+        env:
+          - name: DISABLE_DEV_CHAR_SYMLINK_CREATION
+            value: "true"
+    node-feature-discovery:
+      master:
+        revisionHistoryLimit: 0
+      gc:
+        revisionHistoryLimit: 0

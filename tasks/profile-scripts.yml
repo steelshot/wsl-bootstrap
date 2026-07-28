@@ -1,0 +1,6 @@
+- name: Deploy profile scripts
+  ansible.builtin.copy:
+    dest: "/etc/profile.d/{{ item.name }}"
+    content: "{{ item.content }}"
+    mode: "{{ item.mode | default('0644') }}"
+  loop: "{{ profile.scripts }}"

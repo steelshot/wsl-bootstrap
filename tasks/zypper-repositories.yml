@@ -1,0 +1,22 @@
+# The rpm_key module fails to parse these armored keys on current ansible-core releases. Importing with rpm itself
+# avoids that parser and additionally accepts key files that contain several concatenated keys, which the GitHub CLI
+# keyring does. The import is convergent, so it is never reported as a change.
+- name: Import repository GPG keys
+  ansible.builtin.command:
+    argv:
+      - rpm
+      - --import
+      - "{{ item.gpgkey }}"
+  changed_when: false
+  loop: "{{ zypper.repositories }}"
+
+- name: Add Zypper repositories
+  community.general.zypper_repository:
+    name: "{{ item.name }}"
+    description: "{{ item.description }}"
+    repo: "{{ item.repo }}"
+    enabled: "{{ item.enabled }}"
+    autorefresh: true
+    auto_import_keys: true
+    state: present
+  loop: "{{ zypper.repositories }}"

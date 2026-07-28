@@ -1,0 +1,14 @@
+argument_specs:
+  main:
+    short_description: Install Kubernetes workstation tooling.
+    description: Configures the selected Kubernetes repository and installs kubectl and Helm.
+    options:
+      kubernetes:
+        type: dict
+        required: true
+        description: Kubernetes role configuration.
+        options:
+          version:
+            type: str
+            required: true
+            description: Kubernetes stable repository version.

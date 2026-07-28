@@ -1,0 +1,15 @@
+user:
+  account: "{{ workstation_account | default('') }}"
+  editor: nano
+
+ssh:
+  key:
+    name: id_workstation
+  service:
+    port: 22223
+  export:
+    enabled: true
+    alias: workstation
+
+kubernetes:
+  version: v1.36

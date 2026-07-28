@@ -1,0 +1,23 @@
+- name: Ensure containerd template directory exists
+  ansible.builtin.file:
+    path: /var/lib/rancher/rke2/agent/etc/containerd
+    state: directory
+    mode: "0755"
+
+- name: Deploy containerd NVIDIA default-runtime template
+  ansible.builtin.copy:
+    src: config-v3.toml.tmpl
+    dest: /var/lib/rancher/rke2/agent/etc/containerd/config-v3.toml.tmpl
+    mode: "0644"
+
+- name: Deploy GPU Operator HelmChart
+  ansible.builtin.template:
+    src: gpu-operator.yml.j2
+    dest: /var/lib/rancher/rke2/server/manifests/gpu-operator.yml
+    mode: "0644"
+
+- name: Deploy WSL2 NodeFeatureRule
+  ansible.builtin.copy:
+    src: node-feature-rule.yml
+    dest: /var/lib/rancher/rke2/server/manifests/node-feature-rule.yml
+    mode: "0644"

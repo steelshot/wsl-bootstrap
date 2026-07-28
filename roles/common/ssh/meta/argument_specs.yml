@@ -1,0 +1,55 @@
+argument_specs:
+  main:
+    short_description: Configure SSH client and optional server access for the managed user.
+    description: Installs SSH packages, manages keys, writes client configuration, and optionally enables sshd.
+    options:
+      ssh:
+        type: dict
+        required: true
+        description: SSH role configuration.
+        options:
+          key:
+            type: dict
+            description: Managed SSH identity configuration.
+            options:
+              name:
+                type: str
+                required: false
+                description: >-
+                  File name of the managed SSH identity created under the user's ~/.ssh directory.
+                  The public key is written alongside it with a .pub suffix. Defaults to id_<user.name>.
+          service:
+            type: dict
+            description: SSH server configuration.
+            options:
+              port:
+                type: int
+                default: 22222
+                description: SSH server port.
+              group:
+                type: str
+                default: ssh-users
+                description: Group allowed to access the SSH server.
+          export:
+            type: dict
+            description: Export of the managed SSH identity to the Windows host.
+            options:
+              enabled:
+                type: bool
+                default: false
+                description: >-
+                  Whether to copy the managed key pair into the current Windows profile and register a
+                  matching Host entry in its OpenSSH client configuration.
+              alias:
+                type: str
+                required: false
+                description: >-
+                  Host alias written to the Windows client configuration, used as the shortcut name for
+                  connections such as `ssh workstation`. Defaults to the WSL distribution name, which
+                  stays unique across distributions sharing a Windows machine name.
+              hostname:
+                type: str
+                default: localhost
+                description: >-
+                  Address the Windows host uses to reach the distribution. WSL2 forwards listening ports
+                  to the Windows loopback interface, so distributions are distinguished by their SSH port.

@@ -1,0 +1,5 @@
+argument_specs:
+  main:
+    short_description: Install the managed workstation dotfiles.
+    description: Uses baked package and installer settings to bootstrap the managed user's shell environment.
+    options: {}

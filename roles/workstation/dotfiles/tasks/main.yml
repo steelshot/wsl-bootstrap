@@ -1,0 +1,76 @@
+- name: Assert managed user data is available
+  ansible.builtin.assert:
+    that:
+      - user.name is defined
+      - user.home is defined
+      - user.shell is defined
+    fail_msg: user must be enriched by common/user before including workstation/dotfiles.
+
+- name: Require Git profile
+  ansible.builtin.assert:
+    that:
+      - "'git' in ansible_run_tags"
+    fail_msg: workstation/dotfiles requires the git tag.
+
+- name: Look up dotfiles target user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ user.name }}"
+
+- name: Validate dotfiles target shell
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.getent_passwd[user.name][5] is match('.*/zsh$')
+    fail_msg: The managed user must use a zsh shell before running the dotfiles installer.
+
+- name: Install dotfiles package set
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages:
+        - eza
+        - zoxide
+        - fzf
+        - direnv
+        - bat
+        - fd
+        - ripgrep
+        - git-delta
+        - sd
+        - choose
+        - htop
+        - dust
+        - duf
+        - procs
+        - tlrc
+        - yq
+        - unzip
+        - viddy
+      disable_recommends: false
+
+- name: Run dotfiles installer
+  block:
+    - name: Download dotfiles installer
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/steelshot/dotfiles/main/install.zsh
+        dest: "{{ user.home }}/.dotfiles-install.zsh"
+        owner: "{{ user.name }}"
+        group: "{{ user.name }}"
+        mode: "0700"
+
+    - name: Execute dotfiles installer
+      ansible.builtin.command:
+        argv:
+          - /bin/zsh
+          - "{{ user.home }}/.dotfiles-install.zsh"
+      become_user: "{{ user.name }}"
+      environment:
+        DOTFILES_UNATTENDED: "1"
+        DOTFILES_QUIET: "1"
+      args:
+        creates: "{{ user.home }}/.zshenv"
+  always:
+    - name: Remove downloaded dotfiles installer
+      ansible.builtin.file:
+        path: "{{ user.home }}/.dotfiles-install.zsh"
+        state: absent

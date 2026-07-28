@@ -1,0 +1,10 @@
+ssh:
+  key:
+    name: "id_{{ user.name }}"
+  service:
+    port: 22222
+    group: ssh-users
+  export:
+    enabled: false
+    alias: ""
+    hostname: localhost

@@ -1,0 +1,6 @@
+- name: Install Zypper packages
+  community.general.zypper:
+    name: "{{ zypper.packages }}"
+    state: present
+    disable_recommends: "{{ zypper.disable_recommends | default(false) | bool }}"
+  when: (zypper.packages | length) > 0

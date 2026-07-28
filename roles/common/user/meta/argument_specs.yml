@@ -1,0 +1,37 @@
+argument_specs:
+  main:
+    short_description: Create and configure the managed WSL user.
+    description: Parses the user identity string, creates the account, and applies WSL first boot settings.
+    options:
+      user:
+        type: dict
+        required: true
+        description: Managed user configuration.
+        options:
+          account:
+            type: str
+            required: false
+            description: >-
+              Managed account in name:uid:gid:shell-package format. When empty or omitted, the account is
+              derived from the Windows user name as <username>:1000:1000:zsh, lowercased and stripped of
+              whitespace.
+          editor:
+            type: str
+            required: true
+            description: Package and executable used as the default text editor.
+          groups:
+            type: list
+            elements: str
+            description: Supplementary admin groups; defaults to wheel when core.wheel is enabled.
+          locale:
+            type: str
+            default: C.UTF-8
+            description: Locale passed to systemd-firstboot.
+          keymap:
+            type: str
+            default: gb
+            description: Keymap passed to systemd-firstboot.
+          timezone:
+            type: str
+            default: Europe/Dublin
+            description: Timezone passed to systemd-firstboot.

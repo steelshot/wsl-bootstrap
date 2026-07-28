@@ -1,0 +1,5 @@
+argument_specs:
+  main:
+    short_description: Configure the rootless Podman service.
+    description: Installs Podman, configures subordinate IDs, and enables the packaged user socket.
+    options: {}

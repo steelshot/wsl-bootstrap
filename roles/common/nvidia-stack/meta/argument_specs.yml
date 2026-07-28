@@ -1,0 +1,14 @@
+argument_specs:
+  main:
+    short_description: Install host GPU runtime prerequisites.
+    description: Configures repositories, installs NVIDIA toolkit packages, validates GPU visibility, and prepares CDI and udev support.
+    options:
+      nvidia_stack:
+        type: dict
+        required: true
+        description: NVIDIA stack configuration.
+        options:
+          experimental:
+            type: bool
+            default: false
+            description: Whether to enable the experimental NVIDIA repository instead of the stable repository.

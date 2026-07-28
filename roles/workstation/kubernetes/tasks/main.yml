@@ -1,0 +1,19 @@
+- name: Configure Kubernetes repositories
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-repositories.yml"
+  vars:
+    zypper:
+      repositories:
+        - name: "kubernetes:stable:{{ kubernetes.version }}"
+          description: "Kubernetes {{ kubernetes.version }}"
+          repo: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes.version }}/rpm/"
+          gpgkey: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes.version }}/rpm/repodata/repomd.xml.key"
+          enabled: true
+
+- name: Install Kubernetes client packages
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages:
+        - kubectl
+        - helm
+      disable_recommends: true

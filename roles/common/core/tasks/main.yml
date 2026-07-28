@@ -1,0 +1,50 @@
+- name: Ensure WSL interop is available
+  ansible.builtin.include_tasks: wsl-interop.yml
+
+- name: Configure core repositories
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-repositories.yml"
+  vars:
+    zypper:
+      repositories: "{{ core.repositories }}"
+  when: (core.repositories | length) > 0
+
+- name: Upgrade system via dist-upgrade
+  community.general.zypper:
+    name: "*"
+    state: dist-upgrade
+    update_cache: true
+
+- name: Install core packages
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages: "{{ core.default_packages + core.packages }}"
+
+- name: Install wheel group package
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages:
+        - system-group-wheel
+  when: core.wheel | bool
+
+- name: Grant wheel passwordless sudo
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-wheel
+    content: "%wheel ALL=(ALL:ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: visudo -cf %s
+  when: core.wheel | bool
+
+- name: Remove root password
+  ansible.builtin.command: passwd -d root
+  changed_when: false
+  when: core.wheel | bool
+
+- name: Install custom systemd units
+  ansible.builtin.include_tasks: systemd-units.yml
+  vars:
+    systemd_units:
+      source: "{{ role_path }}/files/systemd"

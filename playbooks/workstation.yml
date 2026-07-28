@@ -1,0 +1,60 @@
+# Variables for this play live in inventory/group_vars/workstation.yml. Every role except common/core and
+# common/user is gated behind a 'never' tag, so it only runs when its tag is named explicitly.
+- name: Workstation
+  hosts: workstation
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Provision system
+      block:
+        - name: Include common/core
+          ansible.builtin.include_role:
+            name: common/core
+            apply:
+              tags: [ always, core ]
+          tags: [ always, core ]
+
+        - name: Include common/user
+          ansible.builtin.include_role:
+            name: common/user
+            public: true
+            apply:
+              tags: [ always, user ]
+          tags: [ always, user ]
+
+        - name: Include common/ssh
+          ansible.builtin.include_role:
+            name: common/ssh
+            apply:
+              tags: [ never, ssh ]
+          tags: [ never, ssh ]
+
+        - name: Include workstation/git
+          ansible.builtin.include_role:
+            name: workstation/git
+            public: true
+            apply:
+              tags: [ never, git ]
+          tags: [ never, git ]
+
+        - name: Include workstation/dotfiles
+          ansible.builtin.include_role:
+            name: workstation/dotfiles
+            apply:
+              tags: [ never, dotfiles ]
+          tags: [ never, dotfiles ]
+
+        - name: Include workstation/kubernetes
+          ansible.builtin.include_role:
+            name: workstation/kubernetes
+            apply:
+              tags: [ never, kubernetes ]
+          tags: [ never, kubernetes ]
+      always:
+        - name: Include common/cleanup
+          ansible.builtin.include_role:
+            name: common/cleanup
+            apply:
+              tags: [ never, cleanup ]
+          tags: [ never, cleanup ]

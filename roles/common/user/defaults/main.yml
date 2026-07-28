@@ -1,0 +1,5 @@
+user:
+  groups: "{{ ['wheel'] if core.wheel | default(true) | bool else [] }}"
+  locale: C.UTF-8
+  keymap: gb
+  timezone: Europe/Dublin
