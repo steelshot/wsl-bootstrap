@@ -46,6 +46,7 @@
         - yq
         - unzip
         - viddy
+        - diffutils
       disable_recommends: false
 
 - name: Run dotfiles installer
