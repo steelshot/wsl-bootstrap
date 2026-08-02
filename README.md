@@ -199,7 +199,7 @@ ssh orchestrator
 ssh workstation
 ```
 
-Each entry pins `IdentityFile` and `IdentitiesOnly`, so the correct key is offered regardless of what else is loaded in an agent. Password and keyboard interactive authentication are disabled inside the distributions, and only members of the SSH access group may log in.
+Each entry pins `IdentityFile` and `IdentitiesOnly`, so the correct key is offered regardless of what else is loaded in an agent. `AddressFamily inet` forces IPv4, so a connection to `localhost` goes straight to the forwarded port instead of first attempting `::1`. Password and keyboard interactive authentication are disabled inside the distributions, and only members of the SSH access group may log in.
 
 ## Kubernetes access from Windows
 

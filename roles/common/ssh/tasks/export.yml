@@ -70,6 +70,7 @@
     block: |
       Host {{ ssh_export_alias }}
           HostName {{ ssh.export.hostname | default('localhost') }}
+          AddressFamily inet
           Port {{ ssh.service.port | default(22222) }}
           User {{ user.name }}
           IdentityFile ~/.ssh/{{ ssh_export_key_name }}
