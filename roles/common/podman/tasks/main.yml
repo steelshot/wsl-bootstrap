@@ -28,3 +28,7 @@
     name: podman.socket
     enabled: true
     scope: global
+
+- name: Export the Podman connection to the Windows host
+  ansible.builtin.include_tasks: export.yml
+  when: podman.export.enabled | default(false) | bool

@@ -24,8 +24,10 @@ argument_specs:
             options:
               port:
                 type: int
-                default: 22222
-                description: SSH server port.
+                required: false
+                description: >-
+                  SSH server port. Defaults to the managed user's uid prefixed with 2, so a uid of
+                  1000 listens on 21000.
               group:
                 type: str
                 default: ssh-users
@@ -45,11 +47,10 @@ argument_specs:
                 required: false
                 description: >-
                   Host alias written to the Windows client configuration, used as the shortcut name for
-                  connections such as `ssh workstation`. Defaults to the WSL distribution name, which
-                  stays unique across distributions sharing a Windows machine name.
+                  connections such as `ssh workstation`. Defaults to the WSL distribution name, lowercased.
               hostname:
                 type: str
                 default: localhost
                 description: >-
                   Address the Windows host uses to reach the distribution. WSL2 forwards listening ports
-                  to the Windows loopback interface, so distributions are distinguished by their SSH port.
+                  to the Windows loopback interface, and distributions are distinguished by their SSH port.

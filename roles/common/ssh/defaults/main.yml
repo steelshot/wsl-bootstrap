@@ -2,7 +2,7 @@ ssh:
   key:
     name: "id_{{ user.name }}"
   service:
-    port: 22222
+    port: "{{ ('2' ~ user.uid) | int }}"
     group: ssh-users
   export:
     enabled: false

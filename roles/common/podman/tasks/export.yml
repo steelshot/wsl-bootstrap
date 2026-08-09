@@ -1,0 +1,90 @@
+- name: Resolve Windows host identity
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/windows-user.yml"
+
+- name: Read WSL distribution root path
+  ansible.builtin.command:
+    argv:
+      - wslpath
+      - -m
+      - /
+  register: podman_wsl_distribution_root
+  changed_when: false
+
+- name: Set Podman connection export facts
+  ansible.builtin.set_fact:
+    podman_export_store: "{{ windows_appdata }}/containers/podman-connections.json"
+    podman_export_identity: "{{ windows_user_profile }}/.ssh/{{ ssh.key.name | default('id_' ~ user.name) }}"
+    podman_export_name: >-
+      {{
+        podman.export.name | default('') or
+        (podman_wsl_distribution_root.stdout.strip().strip('/').split('/') | last | lower)
+      }}
+
+- name: Locate the exported SSH identity
+  ansible.builtin.stat:
+    path: "{{ podman_export_identity }}"
+  register: podman_export_identity_stat
+
+- name: Assert the exported SSH identity is present
+  ansible.builtin.assert:
+    that:
+      - podman_export_identity_stat.stat.exists
+    fail_msg: >-
+      "{{ podman_export_identity }}" was not found. podman.export.enabled requires the ssh tag,
+      which exports the identity the Podman connection authenticates with.
+
+- name: Read the Windows path of the exported SSH identity
+  ansible.builtin.command:
+    argv:
+      - wslpath
+      - -w
+      - "{{ podman_export_identity }}"
+  register: podman_export_identity_windows
+  changed_when: false
+
+- name: Check for an existing Podman connection store
+  ansible.builtin.stat:
+    path: "{{ podman_export_store }}"
+  register: podman_export_store_stat
+
+- name: Read the existing Podman connection store
+  ansible.builtin.slurp:
+    src: "{{ podman_export_store }}"
+  register: podman_export_store_content
+  when: podman_export_store_stat.stat.exists
+
+- name: Set the current Podman connection store document
+  ansible.builtin.set_fact:
+    podman_export_document: >-
+      {{
+        (podman_export_store_content.content | b64decode | from_json)
+        if (podman_export_store_stat.stat.exists and (podman_export_store_content.content | default('') | length) > 0)
+        else {'Connection': {'Connections': {}}, 'Farm': {}}
+      }}
+
+- name: Set the Podman connection entry
+  ansible.builtin.set_fact:
+    podman_export_connection:
+      URI: "ssh://{{ user.name }}@{{ ssh.export.hostname | default('localhost') }}:{{ ssh.service.port | default(('2' ~ user.uid) | int) }}/run/user/{{ user.uid }}/podman/podman.sock"
+      Identity: "{{ podman_export_identity_windows.stdout.strip() }}"
+
+- name: Set the merged Podman connection section
+  ansible.builtin.set_fact:
+    podman_export_section: >-
+      {{
+        podman_export_document['Connection'] | default({}) | combine({
+          'Connections': podman_export_document['Connection']['Connections'] | default({}) | combine({
+            podman_export_name: podman_export_connection
+          })
+        })
+      }}
+
+- name: Promote the Podman connection to the default
+  ansible.builtin.set_fact:
+    podman_export_section: "{{ podman_export_section | combine({'Default': podman_export_name}) }}"
+  when: podman.export['default'] | default(true) | bool
+
+- name: Register the Podman connection on the Windows host
+  ansible.builtin.copy:
+    dest: "{{ podman_export_store }}"
+    content: "{{ podman_export_document | combine({'Connection': podman_export_section}) | to_nice_json }}\n"

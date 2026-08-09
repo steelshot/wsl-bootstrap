@@ -1,5 +1,30 @@
 argument_specs:
   main:
     short_description: Configure the rootless Podman service.
-    description: Installs Podman, configures subordinate IDs, and enables the packaged user socket.
-    options: {}
+    description: Installs Podman, configures subordinate IDs, enables the packaged user socket, and optionally registers the connection on the Windows host.
+    options:
+      podman:
+        type: dict
+        required: true
+        description: Podman role configuration.
+        options:
+          export:
+            type: dict
+            description: Export of the Podman connection to the Windows host.
+            options:
+              enabled:
+                type: bool
+                default: false
+                description: >-
+                  Whether to register the rootless Podman socket as a connection in the current Windows
+                  profile. Requires the ssh tag, which exports the identity the connection authenticates with.
+              name:
+                type: str
+                required: false
+                description: >-
+                  Connection name written to the Windows Podman configuration. Defaults to the WSL
+                  distribution name, lowercased.
+              default:
+                type: bool
+                default: true
+                description: Whether the registered connection becomes the default Podman connection.
