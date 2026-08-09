@@ -1,4 +1,4 @@
-Port {{ ssh.service.port | default(22222) }}
+Port {{ ssh.service.port | default(('2' ~ user.uid) | int) }}
 AllowGroups {{ ssh.service.group | default('ssh-users') }}
 PasswordAuthentication no
 KbdInteractiveAuthentication no

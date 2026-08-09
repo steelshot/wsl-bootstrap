@@ -12,9 +12,10 @@ argument_specs:
             type: str
             required: false
             description: >-
-              Managed account in name:uid:gid:shell-package format. When empty or omitted, the account is
-              derived from the Windows user name as <username>:1000:1000:zsh, lowercased and stripped of
-              whitespace.
+              Managed account in name:uid:gid:shell-package format. The uid and gid must be between
+              1000 and 9999, since 0-999 is reserved for system accounts and the SSH port is derived
+              from the uid as 2<uid>. When empty or omitted, the account is derived from the Windows
+              user name as <username>:1000:1000:zsh, lowercased and stripped of whitespace.
           editor:
             type: str
             required: true

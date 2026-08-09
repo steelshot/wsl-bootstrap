@@ -1,5 +1,3 @@
-# Variables for this play live in inventory/group_vars/workstation.yml. Every role except common/core and
-# common/user is gated behind a 'never' tag, so it only runs when its tag is named explicitly.
 - name: Workstation
   hosts: workstation
   become: true

@@ -5,7 +5,7 @@
   ansible.builtin.command:
     argv:
       - wslpath
-      - -w
+      - -m
       - /
   register: ssh_wsl_distribution_root
   changed_when: false
@@ -14,7 +14,7 @@
   ansible.builtin.set_fact:
     ssh_export_directory: "{{ windows_user_profile }}/.ssh"
     ssh_export_key_name: "{{ ssh.key.name | default('id_' ~ user.name) }}"
-    ssh_export_distribution: '{{ ssh_wsl_distribution_root.stdout.strip().strip("\\").split("\\") | last }}'
+    ssh_export_distribution: "{{ ssh_wsl_distribution_root.stdout.strip().strip('/').split('/') | last | lower }}"
 
 - name: Set host export alias
   ansible.builtin.set_fact:
@@ -65,13 +65,13 @@
   ansible.builtin.blockinfile:
     path: "{{ ssh_export_directory }}/config"
     marker: "# {mark} ANSIBLE MANAGED BLOCK {{ ssh_export_alias }}"
-    insertbefore: BOF
+    insertafter: EOF
     create: true
     block: |
       Host {{ ssh_export_alias }}
           HostName {{ ssh.export.hostname | default('localhost') }}
           AddressFamily inet
-          Port {{ ssh.service.port | default(22222) }}
+          Port {{ ssh.service.port | default(('2' ~ user.uid) | int) }}
           User {{ user.name }}
           IdentityFile ~/.ssh/{{ ssh_export_key_name }}
           IdentitiesOnly yes

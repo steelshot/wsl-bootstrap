@@ -5,8 +5,6 @@ user:
 ssh:
   key:
     name: id_workstation
-  service:
-    port: 22223
   export:
     enabled: true
     alias: workstation

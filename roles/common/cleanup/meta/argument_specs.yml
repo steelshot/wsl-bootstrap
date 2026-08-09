@@ -3,5 +3,5 @@ argument_specs:
     short_description: Remove Ansible and its provisioning state.
     description: >-
       Uninstalls ansible-core along with the Python dependencies pulled in for provisioning, and deletes the
-      configuration and cache directories left behind under the root account. The role takes no variables because it
-      always removes the same fixed set, and it must be the last thing a play runs.
+      configuration and cache directories left behind under the root account. The role takes no variables, and it
+      must be the last thing a play runs.

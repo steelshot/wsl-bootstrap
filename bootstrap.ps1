@@ -5,13 +5,12 @@
     Installs and provisions the managed openSUSE WSL distributions.
 
 .DESCRIPTION
-    Registers both managed distributions without launching them, which keeps the distribution OOBE from running, and
-    then provisions each one by running site.yml as root, limited to that distribution's inventory group. The
-    workstation is installed first and set as the default distribution, while provisioning runs against the
-    orchestrator first so the control plane is available before the workstation tooling is configured.
+    Registers both managed distributions without launching them, and then provisions each one by running site.yml as
+    root, limited to that distribution's inventory group. The workstation is installed first and set as the default
+    distribution, and the orchestrator is provisioned first.
 
     The script refuses to continue when either distribution name is already registered. Nothing is installed, removed,
-    or reconfigured in that case, so an existing environment is never silently replaced.
+    or reconfigured in that case.
 
 .PARAMETER RepositoryPath
     Path to this repository. The directory is mounted into each distribution through DrvFs and used as the working
@@ -19,7 +18,7 @@
 
 .PARAMETER OrchestratorTags
     Ansible tags applied to the orchestrator play. Every role except common/core and common/user is gated behind a
-    never tag, so a role only runs when its tag is listed here.
+    never tag, and only runs when its tag is listed here.
 
 .PARAMETER WorkstationTags
     Ansible tags applied to the workstation play. The dotfiles role additionally asserts that the git tag is present.
@@ -32,8 +31,8 @@
 .EXAMPLE
     .\bootstrap.ps1 -WorkstationTags core, user, ssh, git, dotfiles
 
-    Installs both distributions but limits the workstation to the shell environment, leaving Ansible in place because
-    the cleanup tag is omitted.
+    Installs both distributions but limits the workstation to the shell environment. The cleanup tag is omitted, so
+    Ansible is left in place.
 #>
 
 [CmdletBinding()]
@@ -54,8 +53,6 @@ $ErrorActionPreference = 'Stop'
 # Forces wsl.exe to emit UTF-8 instead of UTF-16LE, so its output can be parsed without stripping null bytes.
 $env:WSL_UTF8 = '1'
 
-# The Ansible entry point and the files it cannot run without, checked before anything is installed so a partial
-# checkout fails fast rather than halfway through provisioning.
 $script:Playbook = 'site.yml'
 $script:RequiredRepositoryFile = @(
 	$script:Playbook,
@@ -156,7 +153,6 @@ function Assert-Prerequisite
 		throw 'wsl.exe was not found. Install the Windows Subsystem for Linux before running this bootstrap.'
 	}
 
-	# Also proves the installed WSL release is recent enough to accept --name and --no-launch.
 	Invoke-Wsl -Arguments @('--version') -Activity 'Querying the installed WSL version'
 
 	foreach ($relativePath in $script:RequiredRepositoryFile)
@@ -186,8 +182,6 @@ function Install-Distribution
 
 	Write-Stage "Installing $( $Distribution.Image ) as $( $Distribution.Name )"
 
-	# --no-launch registers the distribution without starting it, so the image OOBE never runs and every later command
-	# can be issued as root.
 	Invoke-Wsl `
         -Arguments @('--install', $Distribution.Image, '--name', $Distribution.Name, '--no-launch') `
         -Activity "Installing $( $Distribution.Image )"
@@ -220,8 +214,7 @@ function Invoke-Provisioning
 	Write-Stage "Provisioning $( $Distribution.Name ) as the $( $Distribution.Limit ) group"
 
 	# The repository is reached through a DrvFs mount, which is world writable, and Ansible ignores an ansible.cfg it
-	# discovers in a world writable working directory. ANSIBLE_CONFIG is not subject to that check, and the path is
-	# relative because --cd has already placed the shell in the repository root.
+	# discovers in a world writable working directory. ANSIBLE_CONFIG is not subject to that check.
 	$ansibleEnvironment = @('env', 'ANSIBLE_CONFIG=ansible.cfg')
 
 	Invoke-DistributionCommand `
@@ -240,31 +233,25 @@ function Invoke-Provisioning
 	)) `
         -Activity "Running $( $script:Playbook ) for $( $Distribution.Limit ) in $( $Distribution.Name )"
 
-	# The playbook rewrites /etc/wsl.conf and /etc/wsl-distribution.conf, and both are only re-read on a cold start.
 	Invoke-Wsl -Arguments @('--terminate', $Distribution.Name) -Activity "Terminating $( $Distribution.Name )"
 }
 
-# Ansible skips become when it is already running as the target user, so sudo is not required for the play level
-# `become: true`. The become_user transition in workstation/dotfiles does need it, and common/core installs it long
-# before that role runs.
 $workstation = [pscustomobject]@{
 	Image    = 'openSUSE-Tumbleweed'
-	Name     = 'openSUSE-Tumbleweed'
+	Name     = 'Workstation'
 	Limit    = 'workstation'
 	Packages = @('ansible-core')
 	Tags     = $WorkstationTags
 }
 
 $orchestrator = [pscustomobject]@{
-	Image    = 'openSUSE-Leap-16.0'
-	Name     = 'openSUSE-Leap'
+	Image    = 'openSUSE-Tumbleweed'
+	Name     = 'Orchestrator'
 	Limit    = 'orchestrator'
-	Packages = @('ansible-core', 'libexpat1')
+	Packages = @('ansible-core')
 	Tags     = $OrchestratorTags
 }
 
-# The workstation is installed first so it becomes the default distribution, while the orchestrator is provisioned
-# first so its control plane exists before the workstation is configured against it.
 $installOrder = @($workstation, $orchestrator)
 $provisionOrder = @($orchestrator, $workstation)
 

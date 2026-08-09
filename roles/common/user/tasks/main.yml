@@ -28,6 +28,17 @@
         })
       }}
 
+- name: Validate managed account identity range
+  ansible.builtin.assert:
+    that:
+      - user.uid | int >= 1000
+      - user.gid | int >= 1000
+      - user.uid | int <= 9999
+      - user.gid | int <= 9999
+    fail_msg: >-
+      user.account must use a uid and gid between 1000 and 9999; 0-999 is reserved for system
+      accounts, and the SSH port is derived from the uid as 2<uid>.
+
 - name: Install managed user shell and editor
   ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
   vars:
@@ -61,6 +72,11 @@
     shell: "/bin/{{ user.shell }}"
     home: "{{ user.home }}"
     create_home: true
+
+- name: Enable lingering for the managed user
+  ansible.builtin.command: "loginctl enable-linger {{ user.name }}"
+  args:
+    creates: "/var/lib/systemd/linger/{{ user.name }}"
 
 - name: Set managed user as the WSL default
   community.general.ini_file:

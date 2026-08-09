@@ -1,15 +1,17 @@
 user:
-  account: orchestrator:1000:1000:bash
+  account: orchestrator:2000:2000:bash
   editor: nano
 
 ssh:
   key:
     name: id_orchestrator
-  service:
-    port: 22222
   export:
     enabled: true
     alias: orchestrator
+
+podman:
+  export:
+    enabled: true
 
 rke2:
   version: v1.36

@@ -3,8 +3,8 @@
   vars:
     zypper:
       repositories:
-        - name: "kubernetes:stable:{{ kubernetes.version }}"
-          description: "Kubernetes {{ kubernetes.version }}"
+        - name: kubernetes:repo-stable
+          description: kubernetes-stable
           repo: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes.version }}/rpm/"
           gpgkey: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes.version }}/rpm/repodata/repomd.xml.key"
           enabled: true
@@ -16,4 +16,4 @@
       packages:
         - kubectl
         - helm
-      disable_recommends: true
+      disable_recommends: false

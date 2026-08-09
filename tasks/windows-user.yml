@@ -52,3 +52,35 @@
     that:
       - windows_user_profile is match('/')
     fail_msg: Unable to resolve the Windows user profile path from the host environment.
+
+- name: Read Windows application data directory
+  ansible.builtin.command:
+    argv:
+      - cmd.exe
+      - /c
+      - echo
+      - "%APPDATA%"
+  register: windows_appdata_output
+  changed_when: false
+  when: windows_appdata is not defined
+
+- name: Resolve Windows application data path
+  ansible.builtin.command:
+    argv:
+      - wslpath
+      - -u
+      - "{{ windows_appdata_output.stdout_lines | map('trim') | select | list | last | default('') }}"
+  register: windows_appdata_path_output
+  changed_when: false
+  when: windows_appdata is not defined
+
+- name: Cache Windows application data path
+  ansible.builtin.set_fact:
+    windows_appdata: "{{ windows_appdata_path_output.stdout_lines | map('trim') | select | list | last | default('') }}"
+  when: windows_appdata is not defined
+
+- name: Assert Windows application data path is usable
+  ansible.builtin.assert:
+    that:
+      - windows_appdata is match('/')
+    fail_msg: Unable to resolve the Windows application data path from the host environment.
