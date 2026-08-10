@@ -11,6 +11,7 @@
     zypper:
       packages:
         - podman
+        - podman-docker
 
 - name: Configure user subordinate ID ranges
   ansible.builtin.lineinfile:
