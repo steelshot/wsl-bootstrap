@@ -1,24 +1,11 @@
 - name: Resolve Windows host identity
   ansible.builtin.include_tasks: "{{ project_dir }}/tasks/windows-user.yml"
 
-- name: Read WSL distribution root path
-  ansible.builtin.command:
-    argv:
-      - wslpath
-      - -m
-      - /
-  register: podman_wsl_distribution_root
-  changed_when: false
-
 - name: Set Podman connection export facts
   ansible.builtin.set_fact:
     podman_export_store: "{{ windows_appdata }}/containers/podman-connections.json"
-    podman_export_identity: "{{ windows_user_profile }}/.ssh/{{ ssh.key.name | default('id_' ~ user.name) }}"
-    podman_export_name: >-
-      {{
-        podman.export.name | default('') or
-        (podman_wsl_distribution_root.stdout.strip().strip('/').split('/') | last | lower)
-      }}
+    podman_export_identity: "{{ windows_user_profile }}/.ssh/wsl/{{ ssh.key.name | default('id_' ~ user.name) }}"
+    podman_export_name: "{{ podman.export.name | default('') or wsl_distribution }}"
 
 - name: Locate the exported SSH identity
   ansible.builtin.stat:

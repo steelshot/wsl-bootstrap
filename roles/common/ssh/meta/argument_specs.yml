@@ -40,8 +40,9 @@ argument_specs:
                 type: bool
                 default: false
                 description: >-
-                  Whether to copy the managed key pair into the current Windows profile and register a
-                  matching Host entry in its OpenSSH client configuration.
+                  Whether to copy the managed key pair into the wsl subdirectory of the current Windows
+                  profile's .ssh directory and register a matching Host entry beside it, pulled in by an
+                  Include directive in the OpenSSH client configuration.
               alias:
                 type: str
                 required: false

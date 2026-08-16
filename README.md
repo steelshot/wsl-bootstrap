@@ -209,8 +209,8 @@ podman:
 
 ## SSH access from Windows
 
-When `ssh.export.enabled` is set, the role copies the generated key pair into `%USERPROFILE%\.ssh` and registers a matching `Host` block in the Windows OpenSSH client configuration. The block is
-appended below any existing entries.
+When `ssh.export.enabled` is set, the role copies the generated key pair into `%USERPROFILE%\.ssh\wsl` and writes the matching `Host` block beside it as `<alias>.conf`. The Windows OpenSSH client
+configuration receives a single `Include wsl/*.conf` line at the top, ahead of any broader `Host` pattern.
 
 ```
 ssh orchestrator
