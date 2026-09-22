@@ -193,11 +193,11 @@ nvidia_stack:
   experimental: false         # use the experimental NVIDIA repository
 
 kubernetes:
-  version: v1.36              # upstream Kubernetes repository version
+  version: v1.37              # upstream Kubernetes repository version
 
 rke2:
-  version: v1.36              # RKE2 channel or version
-  gpu_operator_version: v26.3.3
+  version: v1.37              # RKE2 channel or version
+  gpu_operator_version: v26.7.0
   kubeconfig_sync: true       # copy the kubeconfig to the Windows profile
 
 podman:
