@@ -10,4 +10,4 @@ ssh:
     alias: workstation
 
 kubernetes:
-  version: v1.36
+  version: v1.37
