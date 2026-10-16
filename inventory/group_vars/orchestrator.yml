@@ -15,5 +15,5 @@ podman:
 
 rke2:
   version: v1.37
-  gpu_operator_version: v26.7.0
+  gpu_operator_version: v26.7.2
   kubeconfig_sync: true
