@@ -197,7 +197,7 @@ kubernetes:
 
 rke2:
   version: v1.37              # RKE2 channel or version
-  gpu_operator_version: v26.7.0
+  gpu_operator_version: v26.7.2
   kubeconfig_sync: true       # copy the kubeconfig to the Windows profile
 
 podman:
