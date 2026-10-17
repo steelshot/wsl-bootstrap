@@ -1,0 +1,13 @@
+- name: Install RKE2 container shutdown unit
+  ansible.builtin.template:
+    src: rke2-killall.service.j2
+    dest: /etc/systemd/system/rke2-killall.service
+    mode: "0644"
+
+- name: Enable RKE2 container shutdown
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/systemd-services.yml"
+  vars:
+    systemd_services:
+      names:
+        - rke2-killall.service
+      daemon_reload: true
