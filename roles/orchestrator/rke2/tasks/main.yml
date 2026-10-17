@@ -65,6 +65,10 @@
   ansible.builtin.include_tasks:
     file: snat-clamp.yml
 
+- name: Configure RKE2 container shutdown
+  ansible.builtin.include_tasks:
+    file: killall.yml
+
 - name: Enable and start rke2-server
   ansible.builtin.include_tasks: "{{ project_dir }}/tasks/systemd-services.yml"
   vars:

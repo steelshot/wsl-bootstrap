@@ -16,4 +16,4 @@ ExecStart=/bin/sh -c 'read -r lo hi < /proc/sys/net/ipv4/ip_local_port_range && 
 ExecStop=-/usr/sbin/nft delete table ip wsl_snat
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=rke2-server.service

@@ -1,0 +1,15 @@
+[Unit]
+Description=Stop the RKE2 containers when RKE2 stops
+Before=rke2-server.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+# rke2-server uses KillMode=process, so its containers keep running after the service stops. WSL waits about 30 seconds
+# for the virtual machine to terminate.
+ExecStop=/usr/local/bin/rke2-killall.sh
+TimeoutStopSec=25
+
+[Install]
+WantedBy=rke2-server.service

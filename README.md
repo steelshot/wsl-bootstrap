@@ -140,6 +140,9 @@ The `rke2` role also installs `wsl-snat-clamp.service`, which runs before `rke2-
 traffic is translated onto source ports across the whole range, so some connections stall. The unit reads `/proc/sys/net/ipv4/ip_local_port_range` at boot and masquerades pod egress into that range
 with nftables. Cilium's BPF masquerade cannot be bounded to a port range, so `bpf.masquerade` is `false` and the kernel performs the translation.
 
+The role also installs `rke2-killall.service`, which runs `rke2-killall.sh` when RKE2 stops. The `rke2-server` unit leaves its containers running after the service stops, so without it a `wsl --terminate` or `wsl --shutdown` kills them outright and they can come back crash-looping. WSL gives the
+virtual machine about 30 seconds to terminate, and a power loss or crash still skips the stop.
+
 `common/core` removes the BusyBox `gzip` and `tar` applets that the Tumbleweed image ships, because they conflict with the `gzip` and `tar` packages it installs.
 
 `cleanup` uninstalls Ansible. Omit it to re-run a playbook against the same distribution.
