@@ -1,0 +1,80 @@
+- name: Tumbleweed
+  hosts: tumbleweed
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Provision system
+      block:
+        - name: Include system/core
+          ansible.builtin.include_role:
+            name: system/core
+            apply:
+              tags: [ always, core ]
+          tags: [ always, core ]
+
+        - name: Include system/user
+          ansible.builtin.include_role:
+            name: system/user
+            public: true
+            apply:
+              tags: [ always, user ]
+          tags: [ always, user ]
+
+        - name: Include system/ssh
+          ansible.builtin.include_role:
+            name: system/ssh
+            apply:
+              tags: [ never, ssh ]
+          tags: [ never, ssh ]
+
+        - name: Include development/git
+          ansible.builtin.include_role:
+            name: development/git
+            public: true
+            apply:
+              tags: [ never, git ]
+          tags: [ never, git ]
+
+        - name: Include development/dotfiles
+          ansible.builtin.include_role:
+            name: development/dotfiles
+            apply:
+              tags: [ never, dotfiles ]
+          tags: [ never, dotfiles ]
+
+        - name: Include development/kubernetes
+          ansible.builtin.include_role:
+            name: development/kubernetes
+            apply:
+              tags: [ never, kubernetes ]
+          tags: [ never, kubernetes ]
+
+        - name: Include containers/nvidia-stack
+          ansible.builtin.include_role:
+            name: containers/nvidia-stack
+            apply:
+              tags: [ never, nvidia-stack ]
+          tags: [ never, nvidia-stack ]
+
+        - name: Include containers/podman
+          ansible.builtin.include_role:
+            name: containers/podman
+            apply:
+              tags: [ never, podman ]
+          tags: [ never, podman ]
+
+        - name: Include containers/rke2
+          ansible.builtin.include_role:
+            name: containers/rke2
+            apply:
+              tags: [ never, rke2 ]
+          tags: [ never, rke2 ]
+
+      always:
+        - name: Include system/cleanup
+          ansible.builtin.include_role:
+            name: system/cleanup
+            apply:
+              tags: [ never, cleanup ]
+          tags: [ never, cleanup ]

@@ -1,5 +1,2 @@
-- name: Orchestrator
-  ansible.builtin.import_playbook: playbooks/orchestrator.yml
-
-- name: Workstation
-  ansible.builtin.import_playbook: playbooks/workstation.yml
+- name: Tumbleweed
+  ansible.builtin.import_playbook: playbooks/tumbleweed.yml

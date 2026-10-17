@@ -1,0 +1,19 @@
+user:
+  account: "{{ workstation_account | default('') }}"
+  editor: nano
+
+ssh:
+  export:
+    enabled: true
+
+podman:
+  export:
+    enabled: true
+
+kubernetes:
+  version: v1.37
+
+rke2:
+  version: latest
+  gpu_operator_version: latest
+  kubeconfig_sync: true

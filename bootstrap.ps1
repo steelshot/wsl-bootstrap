@@ -2,37 +2,53 @@
 
 <#
 .SYNOPSIS
-    Installs and provisions the managed openSUSE WSL distributions.
+    Installs and provisions the managed openSUSE Tumbleweed WSL distribution.
 
 .DESCRIPTION
-    Registers both managed distributions without launching them, and then provisions each one by running site.yml as
-    root, limited to that distribution's inventory group. The workstation is installed first and set as the default
-    distribution, and the orchestrator is provisioned first.
+    Registers the distribution without launching it, sets it as the default distribution, and then provisions it by
+    running site.yml as root, limited to its inventory group. The distribution keeps the name WSL gives it.
 
-    The script refuses to continue when either distribution name is already registered. Nothing is installed, removed,
-    or reconfigured in that case.
+    The script refuses to continue when the distribution name is already registered. Nothing is installed, removed,
+    or reconfigured in that case. With -Update the opposite applies: the distribution must already be registered, and
+    the playbook is run against it again to upgrade it. One-shot steps such as the locale and password setup are
+    skipped on a rerun, while the upgradable roles converge to the newest versions.
+
+    Ansible is left installed unless -Cleanup is given.
 
 .PARAMETER RepositoryPath
-    Path to this repository. The directory is mounted into each distribution through DrvFs and used as the working
+    Path to this repository. The directory is mounted into the distribution through DrvFs and used as the working
     directory for Ansible. Defaults to the directory containing this script.
 
-.PARAMETER OrchestratorTags
-    Ansible tags applied to the orchestrator play. Every role except common/core and common/user is gated behind a
-    never tag, and only runs when its tag is listed here.
+.PARAMETER Tags
+    Ansible tags applied to the play. Every role except system/core and system/user is gated behind a never tag, and
+    only runs when its tag is listed here. The dotfiles role additionally asserts that the git tag is present.
 
-.PARAMETER WorkstationTags
-    Ansible tags applied to the workstation play. The dotfiles role additionally asserts that the git tag is present.
+.PARAMETER Update
+    Provisions an already registered distribution again instead of installing it. The distribution is not terminated
+    afterwards, so that running sessions survive. Restart it to apply changes to /etc/wsl.conf.
+
+.PARAMETER Cleanup
+    Removes Ansible and its provisioning state as the last step. Ansible is reinstalled on the next run.
 
 .EXAMPLE
     .\bootstrap.ps1
 
-    Installs both distributions and provisions them with the full default role set.
+    Installs the distribution and provisions it with the full default role set.
 
 .EXAMPLE
-    .\bootstrap.ps1 -WorkstationTags core, user, ssh, git, dotfiles
+    .\bootstrap.ps1 -Update
 
-    Installs both distributions but limits the workstation to the shell environment. The cleanup tag is omitted, so
-    Ansible is left in place.
+    Upgrades an installed distribution, including RKE2 and the GPU Operator when a newer release is available.
+
+.EXAMPLE
+    .\bootstrap.ps1 -Cleanup
+
+    Installs the distribution and removes Ansible afterwards.
+
+.EXAMPLE
+    .\bootstrap.ps1 -Tags core, user, ssh, git, dotfiles
+
+    Installs the distribution but limits it to the shell environment.
 #>
 
 [CmdletBinding()]
@@ -41,10 +57,11 @@ param(
 	[string] $RepositoryPath = $PSScriptRoot,
 
 	[ValidateNotNullOrEmpty()]
-	[string[]] $OrchestratorTags = @('core', 'user', 'ssh', 'nvidia-stack', 'podman', 'rke2', 'cleanup'),
+	[string[]] $Tags = @('core', 'user', 'ssh', 'nvidia-stack', 'podman', 'rke2', 'git', 'dotfiles', 'kubernetes'),
 
-	[ValidateNotNullOrEmpty()]
-	[string[]] $WorkstationTags = @('core', 'user', 'ssh', 'git', 'dotfiles', 'kubernetes', 'cleanup')
+	[switch] $Update,
+
+	[switch] $Cleanup
 )
 
 Set-StrictMode -Version Latest
@@ -143,7 +160,8 @@ function Assert-Prerequisite
 {
 	param(
 		[Parameter(Mandatory)][object[]] $Distribution,
-		[Parameter(Mandatory)][string] $Path
+		[Parameter(Mandatory)][string] $Path,
+		[switch] $Update
 	)
 
 	Write-Stage 'Checking prerequisites'
@@ -166,10 +184,25 @@ function Assert-Prerequisite
 
 	$registered = Get-RegisteredDistribution
 	$conflicting = @($Distribution | Where-Object { $registered -contains $_.Name } | ForEach-Object { $_.Name })
+	if ($Update)
+	{
+		$missing = @($Distribution | Where-Object { $registered -notcontains $_.Name } | ForEach-Object { $_.Name })
+		if ($missing.Count -gt 0)
+		{
+			throw "Refusing to update because the following WSL distributions are not registered: " +
+					"$( $missing -join ', ' ). Run this bootstrap without -Update to install them."
+		}
+
+		Write-Host "Repository path: $Path"
+		Write-Host 'The distribution is registered and will be updated.'
+		return
+	}
+
 	if ($conflicting.Count -gt 0)
 	{
 		throw "Refusing to continue because the following WSL distributions are already registered: " +
-				"$( $conflicting -join ', ' ). Remove them with 'wsl --unregister <name>' and run this bootstrap again."
+				"$( $conflicting -join ', ' ). Remove them with 'wsl --unregister <name>' and run this bootstrap again, " +
+				"or use -Update to upgrade the existing distribution."
 	}
 
 	Write-Host "Repository path: $Path"
@@ -180,10 +213,10 @@ function Install-Distribution
 {
 	param([Parameter(Mandatory)][object] $Distribution)
 
-	Write-Stage "Installing $( $Distribution.Image ) as $( $Distribution.Name )"
+	Write-Stage "Installing $( $Distribution.Image )"
 
 	Invoke-Wsl `
-        -Arguments @('--install', $Distribution.Image, '--name', $Distribution.Name, '--no-launch') `
+        -Arguments @('--install', $Distribution.Image, '--no-launch') `
         -Activity "Installing $( $Distribution.Image )"
 }
 
@@ -208,7 +241,8 @@ function Invoke-Provisioning
 {
 	param(
 		[Parameter(Mandatory)][object] $Distribution,
-		[Parameter(Mandatory)][string] $Path
+		[Parameter(Mandatory)][string] $Path,
+		[switch] $Terminate
 	)
 
 	Write-Stage "Provisioning $( $Distribution.Name ) as the $( $Distribution.Limit ) group"
@@ -233,46 +267,44 @@ function Invoke-Provisioning
 	)) `
         -Activity "Running $( $script:Playbook ) for $( $Distribution.Limit ) in $( $Distribution.Name )"
 
-	Invoke-Wsl -Arguments @('--terminate', $Distribution.Name) -Activity "Terminating $( $Distribution.Name )"
+	if ($Terminate)
+	{
+		Invoke-Wsl -Arguments @('--terminate', $Distribution.Name) -Activity "Terminating $( $Distribution.Name )"
+	}
 }
 
-$workstation = [pscustomobject]@{
+$provisioningTags = @($Tags | Where-Object { $_ -ne 'cleanup' })
+if ($Cleanup -or ($Tags -contains 'cleanup'))
+{
+	$provisioningTags += 'cleanup'
+}
+
+$distribution = [pscustomobject]@{
 	Image    = 'openSUSE-Tumbleweed'
-	Name     = 'Workstation'
-	Limit    = 'workstation'
+	Name     = 'openSUSE-Tumbleweed'
+	Limit    = 'tumbleweed'
 	Packages = @('ansible-core')
-	Tags     = $WorkstationTags
+	Tags     = $provisioningTags
 }
-
-$orchestrator = [pscustomobject]@{
-	Image    = 'openSUSE-Tumbleweed'
-	Name     = 'Orchestrator'
-	Limit    = 'orchestrator'
-	Packages = @('ansible-core')
-	Tags     = $OrchestratorTags
-}
-
-$installOrder = @($workstation, $orchestrator)
-$provisionOrder = @($orchestrator, $workstation)
 
 $resolvedPath = (Resolve-Path -LiteralPath $RepositoryPath).ProviderPath
 
-Assert-Prerequisite -Distribution $installOrder -Path $resolvedPath
+Assert-Prerequisite -Distribution @($distribution) -Path $resolvedPath -Update:$Update
 
-foreach ($distribution in $installOrder)
+if (-not $Update)
 {
 	Install-Distribution -Distribution $distribution
+
+	Write-Stage "Setting $( $distribution.Name ) as the default distribution"
+	Invoke-Wsl -Arguments @('--set-default', $distribution.Name) -Activity "Setting $( $distribution.Name ) as the default distribution"
 }
 
-Write-Stage "Setting $( $workstation.Name ) as the default distribution"
-Invoke-Wsl -Arguments @('--set-default', $workstation.Name) -Activity "Setting $( $workstation.Name ) as the default distribution"
-
-foreach ($distribution in $provisionOrder)
-{
-	Initialize-Distribution -Distribution $distribution
-	Invoke-Provisioning -Distribution $distribution -Path $resolvedPath
-}
+Initialize-Distribution -Distribution $distribution
+Invoke-Provisioning -Distribution $distribution -Path $resolvedPath -Terminate:(-not $Update)
 
 Write-Stage 'Bootstrap complete'
-Write-Host "Orchestrator: wsl --distribution $( $orchestrator.Name )"
-Write-Host "Workstation:  wsl --distribution $( $workstation.Name )  (default)"
+Write-Host "Distribution: wsl --distribution $( $distribution.Name )  (default)"
+if ($Update)
+{
+	Write-Host "Restart it with 'wsl --terminate $( $distribution.Name )' to apply changes to /etc/wsl.conf."
+}

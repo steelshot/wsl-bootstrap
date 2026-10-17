@@ -1,0 +1,28 @@
+argument_specs:
+  main:
+    short_description: Install and validate the local RKE2 control plane.
+    description: Installs RKE2, configures manifests, waits for Kubernetes readiness, and optionally configures GPU and kubeconfig export support.
+    options:
+      rke2:
+        type: dict
+        required: true
+        description: RKE2 role configuration.
+        options:
+          version:
+            type: str
+            default: latest
+            description: >-
+              RKE2 release channel, such as latest, stable or v1.37, or an exact version such as v1.37.1+rke2r1.
+              The latest channel resolves to the newest release that is not a release candidate. A rerun upgrades
+              RKE2 when the resolved version is newer than the installed one, by at most one Kubernetes minor
+              version, and never downgrades.
+          gpu_operator_version:
+            type: str
+            default: latest
+            description: >-
+              NVIDIA GPU Operator chart version, or latest for the newest chart in the NVIDIA Helm repository that is
+              not a pre-release. A rerun upgrades the chart when the resolved version changes.
+          kubeconfig_sync:
+            type: bool
+            default: true
+            description: Whether to synchronize the generated kubeconfig to the current Windows profile.
