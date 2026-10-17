@@ -1,0 +1,19 @@
+[Unit]
+Description=Clamp pod SNAT source ports to the WSL guest port range
+Before=rke2-server.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Mirrored networking drops guest traffic from the host ephemeral port range, so pod SNAT must stay within the guest range.
+# Priority 90 runs before the iptables nat hooks (priority 100).
+ExecStartPre=-/usr/sbin/nft delete table ip wsl_snat
+ExecStart=/bin/sh -c 'read -r lo hi < /proc/sys/net/ipv4/ip_local_port_range && \
+  echo "table ip wsl_snat { chain postrouting { type nat hook postrouting priority 90; policy accept; \
+  ip saddr 10.42.0.0/16 ip daddr != { 10.42.0.0/16, 10.43.0.0/16 } ip protocol tcp masquerade to :$${lo}-$${hi} fully-random; \
+  ip saddr 10.42.0.0/16 ip daddr != { 10.42.0.0/16, 10.43.0.0/16 } ip protocol udp masquerade to :$${lo}-$${hi} fully-random; }; }" \
+  | /usr/sbin/nft -f -'
+ExecStop=-/usr/sbin/nft delete table ip wsl_snat
+
+[Install]
+WantedBy=multi-user.target

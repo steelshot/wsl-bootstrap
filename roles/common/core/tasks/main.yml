@@ -14,6 +14,13 @@
     state: dist-upgrade
     update_cache: true
 
+- name: Remove BusyBox archive applets that conflict with gzip and tar
+  community.general.zypper:
+    name:
+      - busybox-gzip
+      - busybox-tar
+    state: absent
+
 - name: Install core packages
   ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
   vars:
