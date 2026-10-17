@@ -136,6 +136,12 @@ scripts, enabling systemd services, and resolving Windows host identity. Helpers
 
 The `rke2` role deploys the GPU Operator only when the `nvidia-stack` tag is also present, and `workstation/dotfiles` fails early if the `git` tag is missing.
 
+The `rke2` role also installs `wsl-snat-clamp.service`, which runs before `rke2-server`. Under mirrored networking WSL drops guest traffic that uses the Windows ephemeral port range, and pod
+traffic is translated onto source ports across the whole range, so some connections stall. The unit reads `/proc/sys/net/ipv4/ip_local_port_range` at boot and masquerades pod egress into that range
+with nftables. Cilium's BPF masquerade cannot be bounded to a port range, so `bpf.masquerade` is `false` and the kernel performs the translation.
+
+`common/core` removes the BusyBox `gzip` and `tar` applets that the Tumbleweed image ships, because they conflict with the `gzip` and `tar` packages it installs.
+
 `cleanup` uninstalls Ansible. Omit it to re-run a playbook against the same distribution.
 
 ## Configuration
