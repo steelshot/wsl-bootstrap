@@ -125,26 +125,32 @@ instanceIdleTimeout=-1
 telemetry=false
 vmIdleTimeout=-1
 dnsTunneling=true
-networkingMode=mirrored
+networkingMode=consomme
+localhostForwarding=false
 
 [experimental]
 autoMemoryReclaim=gradual
 ```
 
-| Setting                     | Effect                                                                                                            |
-|-----------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `instanceIdleTimeout=-1`    | Never shuts a distribution down for being idle.                                                                   |
-| `vmIdleTimeout=-1`          | Never shuts down the virtual machine hosting the distributions.                                                   |
-| `telemetry=false`           | Disables WSL telemetry.                                                                                           |
-| `dnsTunneling=true`         | Resolves DNS through Windows instead of a NAT proxy. Already the default.                                         |
-| `networkingMode=mirrored`   | Mirrors the Windows network interfaces into WSL. Services bind against the host directly rather than through NAT. |
-| `autoMemoryReclaim=gradual` | Reclaims cached memory slowly, rather than dropping caches as soon as they are freed.                             |
+| Setting                       | Effect                                                                                                                     |
+|-------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `instanceIdleTimeout=-1`      | Never shuts a distribution down for being idle.                                                                            |
+| `vmIdleTimeout=-1`            | Never shuts down the virtual machine hosting the distributions.                                                            |
+| `telemetry=false`             | Disables WSL telemetry.                                                                                                    |
+| `dnsTunneling=true`           | Resolves DNS through Windows instead of a NAT proxy. Already the default.                                                  |
+| `networkingMode=consomme`     | Required. The network stack that WSL containers use. Pod egress works without a source-port workaround.                    |
+| `localhostForwarding=false`   | Required with `consomme`. Otherwise the guest sends its own `127.0.0.1` traffic to Windows and RKE2 cannot start.          |
+| `autoMemoryReclaim=gradual`   | Reclaims cached memory slowly, rather than dropping caches as soon as they are freed.                                      |
 
 Run `wsl --shutdown` after editing the file. The settings are read when the virtual machine starts.
 
+With this setup the distribution cannot reach services that listen on Windows `localhost`, such as a local model server, because `localhostForwarding`
+is what routes the guest's `127.0.0.1` to Windows. `networkingMode=mirrored` allows both, but it blocks guest traffic on the Windows ephemeral port range,
+which stalls pod egress, and this repository no longer works around that.
+
 `vmIdleTimeout`, `dnsTunneling` and `networkingMode` require Windows 11, the latter two on 22H2 or newer. `instanceIdleTimeout` and `telemetry` are both
-accepted by WSL but are absent from the published settings reference. Under mirrored networking, Linux services bind against ports that Windows also
-uses, and `[experimental] ignoredPorts` carves out exceptions. The SSH alias is unaffected.
+accepted by WSL but are absent from the published settings reference. Windows reaches the distribution through its published ports, and `localhost`
+resolves to `::1` for the Kubernetes API server. The SSH alias is unaffected.
 
 ## Repository layout
 
@@ -189,11 +195,6 @@ cannot hold up the shell setup.
 | `cleanup`      | `system/cleanup`          | Removes Ansible and its provisioning state. Opt-in, and always runs last.                                  |
 
 The `rke2` role deploys the GPU Operator only when the `nvidia-stack` tag is also present, and `development/dotfiles` fails early if the `git` tag is missing.
-
-The `rke2` role also installs `wsl-snat-clamp.service`, which runs before `rke2-server`. Under mirrored networking WSL drops guest traffic that uses the
-Windows ephemeral port range, and pod traffic is translated onto source ports across the whole range, so some connections stall. The unit reads
-`/proc/sys/net/ipv4/ip_local_port_range` at boot and masquerades pod egress into that range with nftables. Cilium's BPF masquerade cannot be bounded to a
-port range, so `bpf.masquerade` is `false` and the kernel performs the translation.
 
 The role also installs `rke2-killall.service`, which runs `rke2-killall.sh` when RKE2 stops. The `rke2-server` unit leaves its containers running after the
 service stops, so without it a `wsl --terminate` or `wsl --shutdown` kills them outright and they can come back crash-looping. WSL gives the virtual
@@ -295,8 +296,8 @@ Provisioning replaces the entries when the distribution is rebuilt and its host 
 ## Kubernetes access from Windows
 
 With `rke2.kubeconfig_sync` enabled, a systemd path unit watches the generated kubeconfig and runs `/usr/local/sbin/rke2-kubeconfig-sync`, which merges it into
-`%USERPROFILE%\.kube\config`. `kubectl` and Helm on Windows can then target the cluster with `--context rke2`, without further configuration. The cluster
-certificate covers `localhost` and `127.0.0.1`, and the API server is reachable on port `6443`.
+`%USERPROFILE%\.kube\config`, pointing the `rke2` cluster at `https://localhost:6443`. `kubectl` and Helm on Windows can then target the cluster with
+`--context rke2`, without further configuration. The cluster certificate covers `localhost` and `127.0.0.1`, and the API server is reachable on port `6443`.
 
 The cluster, user and context are renamed from RKE2's `default` to `rke2`, and every other entry in the file is left as it is. A rebuilt distribution
 replaces the `rke2` entries, which carry a new certificate authority. An existing current context is kept, so the merge does not switch clusters under

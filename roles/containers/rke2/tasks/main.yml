@@ -76,10 +76,6 @@
     file: gpu-operator.yml
   when: "'nvidia-stack' in ansible_run_tags"
 
-- name: Configure pod SNAT port clamp
-  ansible.builtin.include_tasks:
-    file: snat-clamp.yml
-
 - name: Configure RKE2 container shutdown
   ansible.builtin.include_tasks:
     file: killall.yml
