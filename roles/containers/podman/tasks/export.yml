@@ -3,9 +3,14 @@
 
 - name: Set Podman connection export facts
   ansible.builtin.set_fact:
-    podman_export_store: "{{ windows_appdata }}/containers/podman-connections.json"
     podman_export_identity: "{{ windows_user_profile }}/.ssh/wsl/{{ ssh.key.name | default('id_' ~ user.name) }}"
     podman_export_name: "{{ podman.export.name | default('') or wsl_distribution }}"
+    podman_export_port: "{{ ssh.service.port | default(('2' ~ user.uid) | int) }}"
+    podman_export_socket: "/run/user/{{ user.uid }}/podman/podman.sock"
+
+- name: Set the Podman connection URI
+  ansible.builtin.set_fact:
+    podman_export_uri: "ssh://{{ user.name }}@{{ ssh.export.hostname | default('localhost') }}:{{ podman_export_port }}{{ podman_export_socket }}"
 
 - name: Locate the exported SSH identity
   ansible.builtin.stat:
@@ -29,49 +34,84 @@
   register: podman_export_identity_windows
   changed_when: false
 
-- name: Check for an existing Podman connection store
-  ansible.builtin.stat:
-    path: "{{ podman_export_store }}"
-  register: podman_export_store_stat
+- name: Verify the Windows Podman client is reachable
+  ansible.builtin.command:
+    argv:
+      - podman.exe
+      - --version
+  register: podman_export_client
+  changed_when: false
+  failed_when: false
 
-- name: Read the existing Podman connection store
-  ansible.builtin.slurp:
-    src: "{{ podman_export_store }}"
-  register: podman_export_store_content
-  when: podman_export_store_stat.stat.exists
+- name: Assert the Windows Podman client is reachable
+  ansible.builtin.assert:
+    that:
+      - podman_export_client.rc == 0
+    fail_msg: >-
+      podman.exe could not be run through WSL interoperability. podman.export.enabled requires the Windows
+      Podman client to be installed and on the Windows PATH.
 
-- name: Set the current Podman connection store document
+- name: List the Podman connections on the Windows host
+  ansible.builtin.command:
+    argv:
+      - podman.exe
+      - system
+      - connection
+      - list
+      - --format
+      - json
+  register: podman_export_listing
+  changed_when: false
+
+- name: Set the current Podman connection
   ansible.builtin.set_fact:
-    podman_export_document: >-
+    podman_export_existing: >-
       {{
-        (podman_export_store_content.content | b64decode | from_json)
-        if (podman_export_store_stat.stat.exists and (podman_export_store_content.content | default('') | length) > 0)
-        else {'Connection': {'Connections': {}}, 'Farm': {}}
+        (podman_export_listing.stdout | from_json if (podman_export_listing.stdout | trim | length) > 0 else [])
+        | selectattr('Name', 'equalto', podman_export_name) | list | first | default({})
       }}
 
-- name: Set the Podman connection entry
+- name: Set the Podman connection state
   ansible.builtin.set_fact:
-    podman_export_connection:
-      URI: "ssh://{{ user.name }}@{{ ssh.export.hostname | default('localhost') }}:{{ ssh.service.port | default(('2' ~ user.uid) | int) }}/run/user/{{ user.uid }}/podman/podman.sock"
-      Identity: "{{ podman_export_identity_windows.stdout.strip() }}"
-
-- name: Set the merged Podman connection section
-  ansible.builtin.set_fact:
-    podman_export_section: >-
+    podman_export_current: >-
       {{
-        podman_export_document['Connection'] | default({}) | combine({
-          'Connections': podman_export_document['Connection']['Connections'] | default({}) | combine({
-            podman_export_name: podman_export_connection
-          })
-        })
+        podman_export_existing | length > 0
+        and podman_export_existing.URI == podman_export_uri
+        and (podman_export_existing.Identity | default('') | lower) == (podman_export_identity_windows.stdout.strip() | lower)
       }}
 
-- name: Promote the Podman connection to the default
-  ansible.builtin.set_fact:
-    podman_export_section: "{{ podman_export_section | combine({'Default': podman_export_name}) }}"
-  when: podman.export['default'] | default(true) | bool
+- name: Remove the outdated Podman connection
+  ansible.builtin.command:
+    argv:
+      - podman.exe
+      - system
+      - connection
+      - remove
+      - "{{ podman_export_name }}"
+  when: podman_export_existing | length > 0 and not podman_export_current | bool
+  changed_when: true
 
 - name: Register the Podman connection on the Windows host
-  ansible.builtin.copy:
-    dest: "{{ podman_export_store }}"
-    content: "{{ podman_export_document | combine({'Connection': podman_export_section}) | to_nice_json }}\n"
+  ansible.builtin.command:
+    argv: >-
+      {{
+        ['podman.exe', 'system', 'connection', 'add']
+        + (['--default'] if (podman.export['default'] | default(true) | bool) else [])
+        + ['--identity', podman_export_identity_windows.stdout.strip(), podman_export_name, podman_export_uri]
+      }}
+  when: not podman_export_current | bool
+  changed_when: true
+
+- name: Promote the Podman connection to the default
+  ansible.builtin.command:
+    argv:
+      - podman.exe
+      - system
+      - connection
+      - default
+      - "{{ podman_export_name }}"
+  when:
+    - podman_export_current | bool
+    - podman.export['default'] | default(true) | bool
+    - not (podman_export_existing.Default | default(false) | bool)
+  changed_when: true

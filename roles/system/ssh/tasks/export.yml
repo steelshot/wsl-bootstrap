@@ -7,6 +7,12 @@
     ssh_export_subdirectory: wsl
     ssh_export_key_name: "{{ ssh.key.name | default('id_' ~ user.name) }}"
     ssh_export_alias: "{{ ssh.export.alias | default('') or wsl_distribution }}"
+    ssh_export_hostname: "{{ ssh.export.hostname | default('localhost') | lower }}"
+    ssh_export_port: "{{ ssh.service.port | default(('2' ~ user.uid) | int) | int }}"
+
+- name: Set the host key name used by the Windows SSH client
+  ansible.builtin.set_fact:
+    ssh_export_known_host: "{{ ssh_export_hostname if (ssh_export_port | int) == 22 else '[' ~ ssh_export_hostname ~ ']:' ~ ssh_export_port }}"
 
 - name: Assert host export alias is usable
   ansible.builtin.assert:
@@ -25,6 +31,8 @@
     - "{{ ssh_export_directory }}"
     - "{{ ssh_export_directory }}/{{ ssh_export_subdirectory }}"
 
+# The copy module's remote_src mode fails on the 9p-mounted Windows drive with ENOENT, so the files are compared and
+# copied with the coreutils instead.
 - name: Compare the managed SSH identity with the Windows host copy
   ansible.builtin.command:
     argv:
@@ -65,9 +73,9 @@
     dest: "{{ ssh_export_directory }}/{{ ssh_export_subdirectory }}/{{ ssh_export_alias }}.conf"
     content: |
       Host {{ ssh_export_alias }}
-          HostName {{ ssh.export.hostname | default('localhost') }}
+          HostName {{ ssh_export_hostname }}
           AddressFamily inet
-          Port {{ ssh.service.port | default(('2' ~ user.uid) | int) }}
+          Port {{ ssh_export_port }}
           User {{ user.name }}
           IdentityFile ~/.ssh/{{ ssh_export_subdirectory }}/{{ ssh_export_key_name }}
           IdentitiesOnly yes

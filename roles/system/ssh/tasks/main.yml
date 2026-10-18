@@ -68,3 +68,8 @@
     name: sshd.service
     enabled: true
     state: "{{ 'restarted' if ssh_server_configuration.changed else 'started' }}"
+
+- name: Trust the distribution host keys on the Windows host
+  ansible.builtin.include_tasks:
+    file: known-hosts.yml
+  when: ssh.export.enabled | default(false) | bool

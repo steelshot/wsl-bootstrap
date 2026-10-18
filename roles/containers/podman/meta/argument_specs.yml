@@ -17,7 +17,8 @@ argument_specs:
                 default: false
                 description: >-
                   Whether to register the rootless Podman socket as a connection in the current Windows
-                  profile. Requires the ssh tag, which exports the identity the connection authenticates with.
+                  profile, using the Windows Podman client (podman.exe) reached through WSL interoperability.
+                  Requires the ssh tag, which exports the identity the connection authenticates with.
               name:
                 type: str
                 required: false

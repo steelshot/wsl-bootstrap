@@ -26,10 +26,10 @@ From a Windows PowerShell prompt in the repository root:
 ```
 
 The script installs the distribution and provisions it with the full default role set. It refuses to continue when the distribution is already
-registered. To rebuild from scratch, remove it first:
+registered. To rebuild from scratch, tear it down first, which also removes the files it left on Windows:
 
 ```powershell
-wsl --unregister openSUSE-Tumbleweed
+.\bootstrap.ps1 -Teardown
 ```
 
 To upgrade an installed distribution instead, see [Updating](#updating).
@@ -42,6 +42,8 @@ To upgrade an installed distribution instead, see [Updating](#updating).
 | `-Tags`           | All roles but `cleanup` | Roles to apply.                                                                             |
 | `-Update`         | Off                     | Provision the registered distribution again instead of installing it.                       |
 | `-Cleanup`        | Off                     | Remove Ansible and its provisioning state as the last step.                                 |
+| `-Teardown`       | Off                     | Unregister the distribution and remove the files it created on Windows.                     |
+| `-DryRun`         | Off                     | With `-Teardown`, list what would be removed without removing anything.                     |
 
 The default tags are `core`, `user`, `ssh`, `nvidia-stack`, `podman`, `rke2`, `git`, `dotfiles` and `kubernetes`. For example, to build only the shell
 environment:
@@ -81,6 +83,19 @@ RKE2 and the GPU Operator follow the newest release by default:
   is also restarted when `config.yaml` or the containerd template changes.
 - `rke2.gpu_operator_version` defaults to `latest`, which resolves to the newest chart in the NVIDIA Helm repository that has no pre-release suffix. An
   exact chart version overrides it. The version is written into the `HelmChart` manifest, and the RKE2 Helm controller applies the upgrade.
+
+## Removing the distribution
+
+`.\bootstrap.ps1 -Teardown` unregisters `openSUSE-Tumbleweed`, which permanently deletes its filesystem, and removes what the bootstrap created on the
+Windows host:
+
+- The exported SSH key pair and `Host` entry under `%USERPROFILE%\.ssh\wsl`, the `Include wsl/*.conf` line once no entry remains, and the matching host
+  keys in `known_hosts`.
+- The Podman connection registered for the distribution.
+- `%USERPROFILE%\.kube\config`, but only when it points at the RKE2 API server.
+
+It also works when the distribution is already gone, and cannot be combined with `-Update`, `-Cleanup` or `-Tags`. Add `-DryRun` to list what would be
+removed without removing anything. `ssh-keygen` keeps the previous `known_hosts` as `known_hosts.old`.
 
 ## Recommended Windows host settings
 
@@ -244,6 +259,9 @@ podman:
     default: true             # make it the default Podman connection
 ```
 
+The connection is registered and removed with the Windows Podman client (`podman system connection`), which the role runs as `podman.exe` through WSL
+interoperability. Podman for Windows must therefore be installed and on the Windows `PATH`, and the Podman connection store is never edited directly.
+
 ## SSH access from Windows
 
 When `ssh.export.enabled` is set, the role copies the generated key pair into `%USERPROFILE%\.ssh\wsl` and writes the matching `Host` block beside it as `<alias>.conf`. The Windows OpenSSH client
@@ -255,6 +273,9 @@ ssh opensuse-tumbleweed
 
 The entry pins `IdentityFile`, `IdentitiesOnly` and `AddressFamily inet`. Password and keyboard interactive authentication are disabled inside the
 distribution, and only members of the SSH access group may log in.
+
+The distribution's host keys are also recorded in `%USERPROFILE%\.ssh\known_hosts` as `[localhost]:<port>`, so the first connection does not prompt.
+Provisioning replaces the entries when the distribution is rebuilt and its host keys change.
 
 ## Kubernetes access from Windows
 
@@ -289,4 +310,6 @@ updated.
 - Provisioning runs entirely as root. Windows executables are invoked through WSL interoperability to resolve the Windows username and profile path, and
   `system/core` verifies that interoperability is working.
 - Applying `nvidia-stack` requires a working GPU. The role verifies that `nvidia-smi` reports a device and that a CDI specification is generated, and fails early if either check does not pass.
-- A rebuilt distribution generates new SSH host keys. Remove the stale Windows entry before connecting again with `ssh-keygen -R "[localhost]:21000"`.
+- A rebuilt distribution generates new SSH host keys. With `ssh.export.enabled`, provisioning replaces the matching `known_hosts` entries, and `-Teardown`
+  removes them. If the distribution was unregistered another way and the export is disabled, remove the stale entry with
+  `ssh-keygen -R "[localhost]:21000"` before connecting again.

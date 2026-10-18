@@ -15,10 +15,7 @@
     file: version.yml
 
 - name: Check whether rke2-server is running
-  ansible.builtin.command: systemctl is-active --quiet rke2-server
-  register: rke2_service_state
-  changed_when: false
-  failed_when: false
+  ansible.builtin.service_facts:
 
 - name: Install RKE2
   ansible.builtin.shell: set -o pipefail; curl -sfL https://get.rke2.io | sh -
@@ -93,7 +90,7 @@
     name: rke2-server
     state: restarted
   when:
-    - rke2_service_state.rc == 0
+    - (ansible_facts.services['rke2-server.service'].state | default('')) == 'running'
     - (rke2_install_needed | bool) or (rke2_config is changed) or (rke2_containerd_template | default({}) is changed)
 
 - name: Wait for kubeconfig

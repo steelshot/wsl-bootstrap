@@ -100,10 +100,12 @@
         - "--locale={{ user.locale | default('C.UTF-8') }}"
 
 - name: Neutralize OOBE command
-  ansible.builtin.replace:
+  community.general.ini_file:
     path: /etc/wsl-distribution.conf
-    regexp: '^command\s*=.*'
-    replace: command = /bin/true
+    section: oobe
+    option: command
+    value: /bin/true
+    mode: "0644"
 
 - name: Remove managed user password
   ansible.builtin.include_tasks: "{{ project_dir }}/tasks/run-once.yml"

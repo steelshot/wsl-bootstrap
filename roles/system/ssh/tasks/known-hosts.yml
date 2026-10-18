@@ -1,0 +1,25 @@
+- name: Select the host keys that Windows clients can read
+  ansible.builtin.set_fact:
+    ssh_export_host_key_files: >-
+      {{
+        query('ansible.builtin.fileglob', '/etc/ssh/ssh_host_*_key.pub')
+        | select('match', '.*/ssh_host_(ed25519|ecdsa|rsa)_key\.pub$') | list
+      }}
+
+- name: Assert the distribution has usable SSH host keys
+  ansible.builtin.assert:
+    that:
+      - ssh_export_host_key_files | length > 0
+    fail_msg: No ed25519, ecdsa or rsa SSH host keys were found in /etc/ssh, so there is nothing to record in the Windows known_hosts.
+
+# Only the classic key types are recorded. The Go SSH client that Podman uses rejects the whole known_hosts file when it
+# meets a type it does not know, such as the post-quantum ssh-mldsa44-ed25519 key that current OpenSSH also generates.
+# The module keeps one entry per key type, so a rebuilt distribution replaces any stale entry of the same type.
+- name: Record the distribution host keys in the Windows known_hosts
+  ansible.builtin.known_hosts:
+    path: "{{ ssh_export_directory }}/known_hosts"
+    name: "{{ ssh_export_known_host }}"
+    key: "{{ ssh_export_known_host }} {{ (lookup('ansible.builtin.file', item) | split)[0:2] | join(' ') }}"
+  loop: "{{ ssh_export_host_key_files }}"
+  loop_control:
+    label: "{{ item | basename }}"
