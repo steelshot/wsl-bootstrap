@@ -1,0 +1,19 @@
+- name: Ensure the one-shot marker directory exists
+  ansible.builtin.file:
+    path: /var/lib/wsl-bootstrap
+    state: directory
+    mode: "0755"
+
+- name: "Run one-shot step {{ once.name }}"
+  ansible.builtin.command:
+    argv: "{{ once.argv }}"
+    creates: "/var/lib/wsl-bootstrap/{{ once.name }}"
+  register: once_result
+
+- name: "Record one-shot step {{ once.name }}"
+  ansible.builtin.file:
+    path: "/var/lib/wsl-bootstrap/{{ once.name }}"
+    state: touch
+    modification_time: preserve
+    access_time: preserve
+  when: once_result is changed

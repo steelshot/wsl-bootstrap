@@ -1,0 +1,152 @@
+- name: Install RKE2 support packages
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
+  vars:
+    zypper:
+      packages:
+        - conntrack-tools
+        - ethtool
+        - iptables
+        - nftables
+        - python3-kubernetes
+        - socat
+
+- name: Resolve the RKE2 version
+  ansible.builtin.include_tasks:
+    file: version.yml
+
+- name: Check whether rke2-server is running
+  ansible.builtin.service_facts:
+
+- name: Snapshot etcd before upgrading RKE2
+  ansible.builtin.include_tasks:
+    file: snapshot.yml
+  when:
+    - rke2_upgrade | bool
+    - (ansible_facts.services['rke2-server.service'].state | default('')) == 'running'
+
+- name: Install RKE2
+  ansible.builtin.shell: set -o pipefail; curl -sfL https://get.rke2.io | sh -
+  args:
+    executable: /bin/bash
+  environment:
+    INSTALL_RKE2_VERSION: "{{ rke2_target }}"
+    INSTALL_RKE2_METHOD: tar
+  when: rke2_install_needed | bool
+
+- name: Configure RKE2 shell environment
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/profile-scripts.yml"
+  vars:
+    profile:
+      scripts:
+        - name: rke2.sh
+          content: |
+            export PATH="$PATH:/var/lib/rancher/rke2/bin"
+            export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+            export CRI_CONFIG_FILE=/var/lib/rancher/rke2/agent/etc/crictl.yaml
+            export CONTAINERD_ADDRESS=/run/k3s/containerd/containerd.sock
+            export CONTAINERD_NAMESPACE=k8s.io
+
+- name: Ensure RKE2 config directory exists
+  ansible.builtin.file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: "0755"
+
+- name: Deploy RKE2 config
+  ansible.builtin.template:
+    src: config.yml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    mode: "0644"
+  register: rke2_config
+
+- name: Ensure RKE2 manifests directory exists
+  ansible.builtin.file:
+    path: /var/lib/rancher/rke2/server/manifests
+    state: directory
+    mode: "0755"
+
+- name: Deploy Cilium HelmChartConfig
+  ansible.builtin.template:
+    src: rke2-cilium-config.yml.j2
+    dest: /var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yml
+    mode: "0644"
+
+- name: Configure RKE2 GPU Operator
+  ansible.builtin.include_tasks:
+    file: gpu-operator.yml
+  when: "'nvidia-stack' in ansible_run_tags"
+
+- name: Configure pod SNAT port clamp
+  ansible.builtin.include_tasks:
+    file: snat-clamp.yml
+
+- name: Configure RKE2 container shutdown
+  ansible.builtin.include_tasks:
+    file: killall.yml
+
+- name: Enable and start rke2-server
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/systemd-services.yml"
+  vars:
+    systemd_services:
+      names:
+        - rke2-server
+      daemon_reload: true
+
+- name: Restart rke2-server to apply the new version or configuration
+  ansible.builtin.systemd_service:
+    name: rke2-server
+    state: restarted
+  when:
+    - (ansible_facts.services['rke2-server.service'].state | default('')) == 'running'
+    - (rke2_install_needed | bool) or (rke2_config is changed) or (rke2_containerd_template | default({}) is changed)
+
+- name: Wait for kubeconfig
+  ansible.builtin.wait_for:
+    path: /etc/rancher/rke2/rke2.yaml
+    timeout: 180
+
+- name: Configure host kubeconfig synchronization
+  ansible.builtin.include_tasks:
+    file: kubeconfig-sync.yml
+  when: rke2.kubeconfig_sync | bool
+
+- name: Wait for kube-apiserver
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 6443
+    timeout: 180
+
+- name: Wait for RKE2 node Ready
+  kubernetes.core.k8s_info:
+    kubeconfig: /etc/rancher/rke2/rke2.yaml
+    api_version: v1
+    kind: Node
+  register: rke2_node_info
+  until: >-
+    rke2_node_info.resources | length > 0 and
+    (rke2_node_info.resources
+     | map(attribute='status.conditions')
+     | flatten
+     | selectattr('type', 'equalto', 'Ready')
+     | selectattr('status', 'equalto', 'True')
+     | list | length) > 0
+  retries: 60
+  delay: 10
+
+- name: Wait for GPU to be allocatable
+  kubernetes.core.k8s_info:
+    kubeconfig: /etc/rancher/rke2/rke2.yaml
+    api_version: v1
+    kind: Node
+  register: gpu_node_info
+  until: >-
+    gpu_node_info.resources | length > 0 and
+    (gpu_node_info.resources
+     | map(attribute='status.allocatable')
+     | map('dict2items') | flatten
+     | selectattr('key', 'equalto', 'nvidia.com/gpu')
+     | map(attribute='value') | map('int') | select('gt', 0)
+     | list | length) > 0
+  retries: 30
+  delay: 10
+  when: "'nvidia-stack' in ansible_run_tags"

@@ -1,0 +1,17 @@
+argument_specs:
+  main:
+    short_description: Install Kubernetes workstation tooling.
+    description: Configures the selected Kubernetes repository and installs kubectl and Helm.
+    options:
+      kubernetes:
+        type: dict
+        required: true
+        description: Kubernetes role configuration.
+        options:
+          version:
+            type: str
+            default: latest
+            description: >-
+              Kubernetes stable repository minor version, such as v1.37, that kubectl is installed from, or latest
+              for the minor of the newest stable release. A rerun upgrades kubectl and Helm to the newest packages
+              in that repository.

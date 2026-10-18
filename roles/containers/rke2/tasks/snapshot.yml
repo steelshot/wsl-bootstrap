@@ -1,0 +1,22 @@
+# On-demand snapshots are never pruned by RKE2 itself, so the ones this role takes are pruned to the newest few.
+- name: Save an etcd snapshot of the installed RKE2 version
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/rke2
+      - etcd-snapshot
+      - save
+      - --name
+      - "pre-upgrade-{{ rke2_installed | regex_replace('[+]', '-') }}"
+  changed_when: true
+
+- name: Prune the older pre-upgrade etcd snapshots
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/rke2
+      - etcd-snapshot
+      - prune
+      - --name
+      - pre-upgrade
+      - --snapshot-retention
+      - "3"
+  changed_when: false

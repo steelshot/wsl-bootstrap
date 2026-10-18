@@ -1,0 +1,64 @@
+- name: Set the requested RKE2 version
+  ansible.builtin.set_fact:
+    rke2_requested: "{{ (rke2.version | default('latest') | string | trim) or 'latest' }}"
+
+- name: Detect an exact RKE2 version
+  ansible.builtin.set_fact:
+    rke2_requested_exact: >-
+      {{ rke2_requested is match('^v[0-9]+\.[0-9]+\.[0-9]+\+rke2r[0-9]+$') }}
+
+- name: Query the RKE2 release channels
+  ansible.builtin.uri:
+    url: https://update.rke2.io/v1-release/channels
+    return_content: true
+  register: rke2_channels
+  when: not (rke2_requested_exact | bool)
+
+- name: Resolve the RKE2 target version
+  ansible.builtin.set_fact:
+    rke2_target: >-
+      {{
+        rke2_requested
+        if (rke2_requested_exact | bool)
+        else (rke2_channels.json.data
+              | selectattr('name', 'equalto', rke2_requested)
+              | map(attribute='latest') | list | first | default(''))
+      }}
+
+- name: Assert the requested RKE2 version resolved
+  ansible.builtin.assert:
+    that:
+      - rke2_target | length > 0
+    fail_msg: >-
+      rke2.version "{{ rke2_requested }}" is neither an RKE2 release channel nor an exact version such as
+      v1.37.1+rke2r1.
+
+- name: Read the installed RKE2 version
+  ansible.builtin.command: /usr/local/bin/rke2 --version
+  register: rke2_version_output
+  changed_when: false
+  failed_when: false
+
+- name: Set the installed RKE2 version
+  ansible.builtin.set_fact:
+    rke2_installed: >-
+      {{ rke2_version_output.stdout | default('')
+         | regex_search('v[0-9]+\.[0-9]+\.[0-9]+\+rke2r[0-9]+') | default('', true) }}
+
+- name: Decide whether RKE2 needs installing or upgrading
+  ansible.builtin.set_fact:
+    rke2_install_needed: "{{ rke2_installed != rke2_target }}"
+    rke2_upgrade: "{{ (rke2_installed | length > 0) and rke2_installed != rke2_target }}"
+
+- name: Assert the RKE2 change is a supported upgrade
+  ansible.builtin.assert:
+    that:
+      - rke2_installed_key is version(rke2_target_key, '<')
+      - (rke2_target_key.split('.')[1] | int) - (rke2_installed_key.split('.')[1] | int) <= 1
+    fail_msg: >-
+      RKE2 {{ rke2_installed }} cannot be changed to {{ rke2_target }}. Downgrades are not supported, and an upgrade
+      may advance at most one Kubernetes minor version at a time.
+  vars:
+    rke2_installed_key: "{{ rke2_installed | regex_replace('^v', '') | regex_replace('[+]rke2r', '.') }}"
+    rke2_target_key: "{{ rke2_target | regex_replace('^v', '') | regex_replace('[+]rke2r', '.') }}"
+  when: rke2_upgrade | bool
