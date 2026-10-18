@@ -12,6 +12,9 @@
     url: https://update.rke2.io/v1-release/channels
     return_content: true
   register: rke2_channels
+  until: rke2_channels is succeeded
+  retries: 5
+  delay: 5
   when: not (rke2_requested_exact | bool)
 
 - name: Resolve the RKE2 target version

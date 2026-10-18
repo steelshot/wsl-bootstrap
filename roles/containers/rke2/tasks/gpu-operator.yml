@@ -7,6 +7,9 @@
     url: https://helm.ngc.nvidia.com/nvidia/index.yaml
     return_content: true
   register: rke2_gpu_operator_index
+  until: rke2_gpu_operator_index is succeeded
+  retries: 5
+  delay: 5
   when: rke2_gpu_operator_requested == 'latest'
 
 - name: Resolve the GPU Operator chart version

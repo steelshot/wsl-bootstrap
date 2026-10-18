@@ -7,6 +7,9 @@
     url: https://dl.k8s.io/release/stable.txt
     return_content: true
   register: kubernetes_stable
+  until: kubernetes_stable is succeeded
+  retries: 5
+  delay: 5
   when: kubernetes_requested == 'latest'
 
 - name: Resolve the Kubernetes repository version
