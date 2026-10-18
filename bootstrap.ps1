@@ -16,8 +16,8 @@
     Ansible is left installed unless -Cleanup is given.
 
     With -Teardown the distribution is unregistered and the files the bootstrap created on the Windows host are
-    removed: the exported SSH keys and Host entries, the matching known_hosts entries, the synchronized kubeconfig,
-    and the Podman connection. It works whether or not the distribution is still registered.
+    removed: the exported SSH keys and Host entries, the matching known_hosts entries, the rke2 entries in the
+    kubeconfig, and the Podman connection. It works whether or not the distribution is still registered.
 
 .PARAMETER RepositoryPath
     Path to this repository. The directory is mounted into the distribution through DrvFs and used as the working
@@ -485,24 +485,67 @@ function Invoke-Teardown
 
 	$kubeDirectory = Join-Path -Path $env:USERPROFILE -ChildPath '.kube'
 	$kubeconfig = Join-Path -Path $kubeDirectory -ChildPath 'config'
-	if (Test-Path -LiteralPath $kubeconfig -PathType Leaf)
+
+	# The kubeconfig synchronization merges the RKE2 cluster, user and context into this file under the name rke2. Only
+	# those entries are removed, and the file itself only when nothing else is left in it.
+	if ((Test-Path -LiteralPath $kubeconfig -PathType Leaf) -and
+			(Select-String -LiteralPath $kubeconfig -Pattern '^\s*(- )?name: rke2\s*$' -Quiet))
 	{
-		# The synchronization overwrites this file with the RKE2 kubeconfig, whose API server is the loopback address.
-		if ((Get-Content -LiteralPath $kubeconfig -Raw) -notmatch 'https://127\.0\.0\.1:6443')
+		if (-not (Get-Command -Name kubectl.exe -ErrorAction SilentlyContinue))
 		{
-			Write-Warning "$kubeconfig does not point at the RKE2 API server, so it was left in place."
+			Write-Warning ("kubectl.exe was not found, so the rke2 entries were left in $kubeconfig. Remove them with: " +
+					'kubectl config delete-context rke2; kubectl config delete-cluster rke2; kubectl config delete-user rke2')
 		}
 		else
 		{
-			if (Test-Execute -Action 'Remove the synchronized kubeconfig' -Target $kubeconfig)
+			$preference = $ErrorActionPreference
+			$ErrorActionPreference = 'Continue'
+			try
 			{
-				Remove-Item -LiteralPath $kubeconfig -Force
-			}
+				$others = @()
+				$readable = $true
+				foreach ($kind in 'contexts', 'clusters', 'users')
+				{
+					$listed = (& kubectl.exe config --kubeconfig $kubeconfig view --raw -o ('jsonpath={{.{0}[*].name}}' -f $kind) 2>$null) -join ' '
+					if ($LASTEXITCODE -ne 0)
+					{
+						$readable = $false
+					}
 
-			$kubeRemaining = @(Get-ChildItem -LiteralPath $kubeDirectory -Force | Where-Object { $_.Name -notin 'config', 'cache' })
-			if ($kubeRemaining.Count -eq 0 -and (Test-Execute -Action 'Remove the .kube directory' -Target $kubeDirectory))
+					$others += @($listed -split '\s+' | Where-Object { $_ -and $_ -ne 'rke2' })
+				}
+
+				if (-not $readable)
+				{
+					Write-Warning "kubectl could not read $kubeconfig, so the rke2 entries were left in place."
+				}
+				elseif ($others.Count -eq 0)
+				{
+					if (Test-Execute -Action 'Remove the synchronized kubeconfig' -Target $kubeconfig)
+					{
+						Remove-Item -LiteralPath $kubeconfig -Force
+					}
+
+					$kubeRemaining = @(Get-ChildItem -LiteralPath $kubeDirectory -Force | Where-Object { $_.Name -notin 'config', 'cache' })
+					if ($kubeRemaining.Count -eq 0 -and (Test-Execute -Action 'Remove the .kube directory' -Target $kubeDirectory))
+					{
+						Remove-Item -LiteralPath $kubeDirectory -Recurse -Force
+					}
+				}
+				else
+				{
+					foreach ($kind in 'context', 'cluster', 'user')
+					{
+						if (Test-Execute -Action "Remove the rke2 kubeconfig $kind" -Target $kubeconfig)
+						{
+							& kubectl.exe config --kubeconfig $kubeconfig "delete-$kind" rke2 *> $null
+						}
+					}
+				}
+			}
+			finally
 			{
-				Remove-Item -LiteralPath $kubeDirectory -Recurse -Force
+				$ErrorActionPreference = $preference
 			}
 		}
 	}

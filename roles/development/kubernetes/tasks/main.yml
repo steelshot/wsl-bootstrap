@@ -1,3 +1,30 @@
+- name: Set the requested Kubernetes client version
+  ansible.builtin.set_fact:
+    kubernetes_requested: "{{ (kubernetes.version | default('latest') | string | trim) or 'latest' }}"
+
+- name: Query the latest stable Kubernetes release
+  ansible.builtin.uri:
+    url: https://dl.k8s.io/release/stable.txt
+    return_content: true
+  register: kubernetes_stable
+  when: kubernetes_requested == 'latest'
+
+- name: Resolve the Kubernetes repository version
+  ansible.builtin.set_fact:
+    kubernetes_repository_version: >-
+      {{
+        (kubernetes_stable.content | trim | regex_search('^v[0-9]+[.][0-9]+') | default('', true))
+        if kubernetes_requested == 'latest'
+        else kubernetes_requested
+      }}
+
+- name: Assert the Kubernetes repository version resolved
+  ansible.builtin.assert:
+    that:
+      - kubernetes_repository_version is match('^v[0-9]+[.][0-9]+$')
+    fail_msg: >-
+      kubernetes.version "{{ kubernetes_requested }}" must be latest or a minor version such as v1.37.
+
 - name: Configure Kubernetes repositories
   ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-repositories.yml"
   vars:
@@ -5,8 +32,8 @@
       repositories:
         - name: kubernetes:repo-stable
           description: kubernetes-stable
-          repo: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes.version }}/rpm/"
-          gpgkey: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes.version }}/rpm/repodata/repomd.xml.key"
+          repo: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_repository_version }}/rpm/"
+          gpgkey: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_repository_version }}/rpm/repodata/repomd.xml.key"
           enabled: true
 
 - name: Install Kubernetes client packages
@@ -16,4 +43,5 @@
       packages:
         - kubectl
         - helm
+      state: latest
       disable_recommends: false

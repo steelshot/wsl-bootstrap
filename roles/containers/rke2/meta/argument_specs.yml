@@ -25,4 +25,5 @@ argument_specs:
           kubeconfig_sync:
             type: bool
             default: true
-            description: Whether to synchronize the generated kubeconfig to the current Windows profile.
+            description: >-
+              Whether to merge the generated kubeconfig into the current Windows profile, under the name rke2.

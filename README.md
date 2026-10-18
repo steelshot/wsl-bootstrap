@@ -75,7 +75,7 @@ The steps fall into two kinds:
 - Everything else converges on every run and upgrades what it manages. `system/core` runs a `dist-upgrade`, which also upgrades the packages the other
   roles install.
 
-RKE2 and the GPU Operator follow the newest release by default:
+RKE2, the GPU Operator and `kubectl` follow the newest release by default:
 
 - `rke2.version` defaults to `latest`, which resolves through the RKE2 release channels to the newest release that is not a release candidate. A channel
   such as `stable` or `v1.36`, or an exact version such as `v1.37.1+rke2r1`, overrides it. A rerun upgrades RKE2 when the resolved version is newer than
@@ -83,6 +83,20 @@ RKE2 and the GPU Operator follow the newest release by default:
   is also restarted when `config.yaml` or the containerd template changes.
 - `rke2.gpu_operator_version` defaults to `latest`, which resolves to the newest chart in the NVIDIA Helm repository that has no pre-release suffix. An
   exact chart version overrides it. The version is written into the `HelmChart` manifest, and the RKE2 Helm controller applies the upgrade.
+- `kubernetes.version` defaults to `latest`, which resolves to the minor of the newest stable Kubernetes release (`https://dl.k8s.io/release/stable.txt`) and
+  points the `kubectl` repository at it. A minor such as `v1.37` overrides it. A rerun upgrades `kubectl` and Helm, and `kubectl` supports a cluster one
+  minor version older or newer than itself.
+
+Before RKE2 is upgraded, an etcd snapshot of the installed version is saved as `pre-upgrade-<version>` in `/var/lib/rancher/rke2/server/db/snapshots`, and
+only the newest three are kept. A fresh install, a rerun with nothing to upgrade, and a node whose `rke2-server` is stopped take no snapshot. The role never
+downgrades, so recovery is manual. Pin `rke2.version` to the old version first so that a rerun does not upgrade again, then in the distribution:
+
+```bash
+sudo systemctl stop rke2-server
+curl -sfL https://get.rke2.io | sudo env INSTALL_RKE2_VERSION=<old version> INSTALL_RKE2_METHOD=tar sh -
+sudo rke2 server --cluster-reset --cluster-reset-restore-path=/var/lib/rancher/rke2/server/db/snapshots/<snapshot>
+sudo systemctl start rke2-server
+```
 
 ## Removing the distribution
 
@@ -92,7 +106,8 @@ Windows host:
 - The exported SSH key pair and `Host` entry under `%USERPROFILE%\.ssh\wsl`, the `Include wsl/*.conf` line once no entry remains, and the matching host
   keys in `known_hosts`.
 - The Podman connection registered for the distribution.
-- `%USERPROFILE%\.kube\config`, but only when it points at the RKE2 API server.
+- The `rke2` cluster, user and context in `%USERPROFILE%\.kube\config`. Other clusters in the file are kept, and the file itself is removed only when nothing
+  else remains in it. This needs `kubectl.exe`; without it the teardown prints the three commands that remove the entries.
 
 It also works when the distribution is already gone, and cannot be combined with `-Update`, `-Cleanup` or `-Tags`. Add `-DryRun` to list what would be
 removed without removing anything. `ssh-keygen` keeps the previous `known_hosts` as `known_hosts.old`.
@@ -245,12 +260,12 @@ nvidia_stack:
   experimental: false         # use the experimental NVIDIA repository
 
 kubernetes:
-  version: v1.37              # upstream Kubernetes repository version
+  version: latest             # kubectl repository: latest, or a minor such as v1.37
 
 rke2:
   version: latest             # RKE2 channel or exact version
   gpu_operator_version: latest  # GPU Operator chart version
-  kubeconfig_sync: true       # copy the kubeconfig to the Windows profile
+  kubeconfig_sync: true       # merge the kubeconfig into the Windows profile
 
 podman:
   export:
@@ -279,8 +294,13 @@ Provisioning replaces the entries when the distribution is rebuilt and its host 
 
 ## Kubernetes access from Windows
 
-With `rke2.kubeconfig_sync` enabled, a systemd path unit watches the generated kubeconfig and copies it to `%USERPROFILE%\.kube\config`. `kubectl` and Helm on Windows target the cluster without
-further configuration. The cluster certificate covers `localhost` and `127.0.0.1`, and the API server is reachable on port `6443`.
+With `rke2.kubeconfig_sync` enabled, a systemd path unit watches the generated kubeconfig and runs `/usr/local/sbin/rke2-kubeconfig-sync`, which merges it into
+`%USERPROFILE%\.kube\config`. `kubectl` and Helm on Windows can then target the cluster with `--context rke2`, without further configuration. The cluster
+certificate covers `localhost` and `127.0.0.1`, and the API server is reachable on port `6443`.
+
+The cluster, user and context are renamed from RKE2's `default` to `rke2`, and every other entry in the file is left as it is. A rebuilt distribution
+replaces the `rke2` entries, which carry a new certificate authority. An existing current context is kept, so the merge does not switch clusters under
+you. On a machine with no kubeconfig yet, `rke2` becomes the current context.
 
 Inside the distribution, a profile script exports `KUBECONFIG` along with the containerd and crictl settings needed to inspect the node directly.
 

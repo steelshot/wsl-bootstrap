@@ -17,6 +17,13 @@
 - name: Check whether rke2-server is running
   ansible.builtin.service_facts:
 
+- name: Snapshot etcd before upgrading RKE2
+  ansible.builtin.include_tasks:
+    file: snapshot.yml
+  when:
+    - rke2_upgrade | bool
+    - (ansible_facts.services['rke2-server.service'].state | default('')) == 'running'
+
 - name: Install RKE2
   ansible.builtin.shell: set -o pipefail; curl -sfL https://get.rke2.io | sh -
   args:

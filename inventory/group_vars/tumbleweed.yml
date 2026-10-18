@@ -11,7 +11,7 @@ podman:
     enabled: true
 
 kubernetes:
-  version: v1.37
+  version: latest
 
 rke2:
   version: latest

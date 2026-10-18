@@ -10,5 +10,8 @@ argument_specs:
         options:
           version:
             type: str
-            required: true
-            description: Kubernetes stable repository version.
+            default: latest
+            description: >-
+              Kubernetes stable repository minor version, such as v1.37, that kubectl is installed from, or latest
+              for the minor of the newest stable release. A rerun upgrades kubectl and Helm to the newest packages
+              in that repository.
