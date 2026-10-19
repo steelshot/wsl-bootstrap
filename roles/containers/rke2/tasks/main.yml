@@ -1,3 +1,7 @@
+- name: Validate WSL networking
+  ansible.builtin.include_tasks:
+    file: networking.yml
+
 - name: Install RKE2 support packages
   ansible.builtin.include_tasks: "{{ project_dir }}/tasks/zypper-packages.yml"
   vars:
@@ -79,6 +83,10 @@
 - name: Configure RKE2 container shutdown
   ansible.builtin.include_tasks:
     file: killall.yml
+
+- name: Configure pod SNAT port clamp
+  ansible.builtin.include_tasks:
+    file: snat-clamp.yml
 
 - name: Enable and start rke2-server
   ansible.builtin.include_tasks: "{{ project_dir }}/tasks/systemd-services.yml"
