@@ -1,0 +1,42 @@
+- name: Install pod SNAT port clamp unit
+  ansible.builtin.template:
+    src: wsl-snat-clamp.service.j2
+    dest: /etc/systemd/system/wsl-snat-clamp.service
+    mode: "0644"
+  register: rke2_snat_clamp_unit
+  when: rke2_networking_mode == 'mirrored'
+
+- name: Enable pod SNAT port clamp
+  ansible.builtin.systemd_service:
+    name: wsl-snat-clamp.service
+    enabled: true
+    state: "{{ 'restarted' if rke2_snat_clamp_unit is changed else 'started' }}"
+    daemon_reload: true
+  when: rke2_networking_mode == 'mirrored'
+
+- name: Check for a previous pod SNAT port clamp unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/wsl-snat-clamp.service
+  register: rke2_previous_snat_clamp
+  when: rke2_networking_mode != 'mirrored'
+
+- name: Disable pod SNAT port clamp outside mirrored mode
+  ansible.builtin.systemd_service:
+    name: wsl-snat-clamp.service
+    enabled: false
+    state: stopped
+  when:
+    - rke2_networking_mode != 'mirrored'
+    - rke2_previous_snat_clamp.stat.exists
+
+- name: Remove pod SNAT port clamp unit outside mirrored mode
+  ansible.builtin.file:
+    path: /etc/systemd/system/wsl-snat-clamp.service
+    state: absent
+  register: rke2_snat_clamp_removed
+  when: rke2_networking_mode != 'mirrored'
+
+- name: Reload systemd after removing pod SNAT port clamp
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: rke2_snat_clamp_removed is changed

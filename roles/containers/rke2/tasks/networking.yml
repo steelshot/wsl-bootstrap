@@ -1,0 +1,36 @@
+- name: Read active WSL networking mode
+  ansible.builtin.command:
+    argv:
+      - wslinfo
+      - --networking-mode
+  register: rke2_networking_mode_output
+  changed_when: false
+  check_mode: false
+
+- name: Cache WSL networking mode
+  ansible.builtin.set_fact:
+    rke2_networking_mode: "{{ rke2_networking_mode_output.stdout | trim | lower }}"
+
+- name: Resolve Windows host identity
+  ansible.builtin.include_tasks: "{{ project_dir }}/tasks/windows-user.yml"
+  when: rke2_networking_mode in ['consomme', 'virtioproxy']
+
+- name: Check for Windows WSL configuration
+  ansible.builtin.stat:
+    path: "{{ windows_user_profile }}/.wslconfig"
+  register: rke2_wslconfig
+  when: rke2_networking_mode in ['consomme', 'virtioproxy']
+
+- name: Reject consomme with localhost forwarding
+  ansible.builtin.assert:
+    that:
+      - >-
+        rke2_wslconfig.stat.exists and
+        (lookup('ansible.builtin.ini', 'localhostForwarding', section='wsl2',
+                file=windows_user_profile + '/.wslconfig', default='true') | trim | lower) == 'false'
+    fail_msg: >-
+      RKE2 cannot run with consomme (virtioproxy) networking and localhostForwarding enabled.
+      Set localhostForwarding=false under [wsl2] in %USERPROFILE%\.wslconfig,
+      or use networkingMode=mirrored for host-guest localhost access.
+      Run wsl --shutdown after changing .wslconfig, then rerun provisioning.
+  when: rke2_networking_mode in ['consomme', 'virtioproxy']

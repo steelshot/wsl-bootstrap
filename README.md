@@ -125,8 +125,7 @@ instanceIdleTimeout=-1
 telemetry=false
 vmIdleTimeout=-1
 dnsTunneling=true
-networkingMode=consomme
-localhostForwarding=false
+networkingMode=mirrored
 
 [experimental]
 autoMemoryReclaim=gradual
@@ -138,19 +137,31 @@ autoMemoryReclaim=gradual
 | `vmIdleTimeout=-1`            | Never shuts down the virtual machine hosting the distributions.                                                            |
 | `telemetry=false`             | Disables WSL telemetry.                                                                                                    |
 | `dnsTunneling=true`           | Resolves DNS through Windows instead of a NAT proxy. Already the default.                                                  |
-| `networkingMode=consomme`     | Required. The network stack that WSL containers use. Pod egress works without a source-port workaround.                    |
-| `localhostForwarding=false`   | Required with `consomme`. Otherwise the guest sends its own `127.0.0.1` traffic to Windows and RKE2 cannot start.          |
+| `networkingMode=mirrored`     | Supports host-guest access over `127.0.0.1`. RKE2 applies a pod SNAT source-port clamp for this mode.                        |
 | `autoMemoryReclaim=gradual`   | Reclaims cached memory slowly, rather than dropping caches as soon as they are freed.                                      |
 
 Run `wsl --shutdown` after editing the file. The settings are read when the virtual machine starts.
 
-With this setup the distribution cannot reach services that listen on Windows `localhost`, such as a local model server, because `localhostForwarding`
-is what routes the guest's `127.0.0.1` to Windows. `networkingMode=mirrored` allows both, but it blocks guest traffic on the Windows ephemeral port range,
-which stalls pod egress, and this repository no longer works around that.
+Mirrored mode lets Windows and the distribution reach each other's services over `127.0.0.1`, including Windows-hosted model servers and the
+guest Kubernetes API. `localhostForwarding` is ignored in mirrored mode; it does not need to be enabled. Use IPv4 explicitly when connecting from
+Linux to Windows: mirrored mode does not support that direction over `::1`. Ports required by Linux-only services can be listed under
+`[experimental] ignoredPorts` if Windows already uses them; do not list ports that need to remain accessible from Windows.
 
-`vmIdleTimeout`, `dnsTunneling` and `networkingMode` require Windows 11, the latter two on 22H2 or newer. `instanceIdleTimeout` and `telemetry` are both
-accepted by WSL but are absent from the published settings reference. Windows reaches the distribution through its published ports, and `localhost`
-resolves to `::1` for the Kubernetes API server. The SSH alias is unaffected.
+Consomme networking (formerly `virtioproxy`) is also supported. Replace the networking settings under `[wsl2]` with:
+
+```ini
+networkingMode=consomme
+localhostForwarding=false
+```
+
+The `rke2` role reads the active mode with `wslinfo --networking-mode`. With consomme it checks `%USERPROFILE%\.wslconfig` and fails before installing
+or upgrading RKE2 unless `localhostForwarding=false` is explicit; an omitted setting defaults to `true`. This avoids forwarding RKE2's guest-local
+loopback connections to Windows. Use mirrored mode when guest access to Windows localhost services is needed. Restart WSL after changing either
+setting: the file describes the next boot, whereas `wslinfo` reports the running mode.
+
+`vmIdleTimeout`, `dnsTunneling` and `networkingMode` require Windows 11, the latter two on 22H2 or newer. See the
+[WSL configuration reference](https://learn.microsoft.com/en-us/windows/wsl/wsl-config) and
+[mirrored networking guidance](https://learn.microsoft.com/en-us/windows/wsl/networking#mirrored-mode-networking).
 
 ## Repository layout
 
@@ -195,6 +206,12 @@ cannot hold up the shell setup.
 | `cleanup`      | `system/cleanup`          | Removes Ansible and its provisioning state. Opt-in, and always runs last.                                  |
 
 The `rke2` role deploys the GPU Operator only when the `nvidia-stack` tag is also present, and `development/dotfiles` fails early if the `git` tag is missing.
+
+In mirrored mode, the `rke2` role installs `wsl-snat-clamp.service` and starts it before `rke2-server`. WSL can drop guest traffic whose source port
+falls in the Windows ephemeral range. The unit reads `/proc/sys/net/ipv4/ip_local_port_range` at startup and uses nftables to constrain TCP and UDP
+pod egress masquerading to the guest range, excluding the default pod and service networks (`10.42.0.0/16` and `10.43.0.0/16`).
+Cilium's `bpf.masquerade` is disabled in mirrored mode so kernel NAT can apply the clamp. In other modes BPF masquerading stays enabled, and
+provisioning stops, disables and removes a previously managed clamp unit when switching away from mirrored mode.
 
 The role also installs `rke2-killall.service`, which runs `rke2-killall.sh` when RKE2 stops. The `rke2-server` unit leaves its containers running after the
 service stops, so without it a `wsl --terminate` or `wsl --shutdown` kills them outright and they can come back crash-looping. WSL gives the virtual
@@ -296,8 +313,9 @@ Provisioning replaces the entries when the distribution is rebuilt and its host 
 ## Kubernetes access from Windows
 
 With `rke2.kubeconfig_sync` enabled, a systemd path unit watches the generated kubeconfig and runs `/usr/local/sbin/rke2-kubeconfig-sync`, which merges it into
-`%USERPROFILE%\.kube\config`, pointing the `rke2` cluster at `https://localhost:6443`. `kubectl` and Helm on Windows can then target the cluster with
-`--context rke2`, without further configuration. The cluster certificate covers `localhost` and `127.0.0.1`, and the API server is reachable on port `6443`.
+`%USERPROFILE%\.kube\config`. The `rke2` cluster uses `https://127.0.0.1:6443` in mirrored mode and `https://localhost:6443` with consomme, preserving
+the latter's Windows localhost forwarding behaviour. `kubectl` and Helm on Windows can then target the cluster with `--context rke2`, without
+further configuration. The cluster certificate covers `localhost` and `127.0.0.1`, and the API server is reachable on port `6443`.
 
 The cluster, user and context are renamed from RKE2's `default` to `rke2`, and every other entry in the file is left as it is. A rebuilt distribution
 replaces the `rke2` entries, which carry a new certificate authority. An existing current context is kept, so the merge does not switch clusters under
